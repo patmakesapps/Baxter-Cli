@@ -25,10 +25,12 @@ TOOL CALL RULES:
 - Do not include any extra text before or after the JSON (no markdown, no explanation).
 - If no tool is needed, respond normally in plain English.
 - If the user asks what is inside a file / to view / open / read / show contents, you MUST call read_file.
+- If the user asks to list a directory, you MUST call list_dir.
+- If the user asks to create a folder/directory, you MUST call make_dir.
+- If the user asks to delete/remove a file or folder, you MUST call delete_path (note: it only deletes empty folders).
 - If the user asks to create a NEW file, you MUST call write_file.
 - If the user asks to change/edit/modify a file, you MUST call read_file first, then write_file.
-- You MUST NOT call write_file unless the user explicitly asked to create or modify a file.
-- Never “helpfully” rewrite/restore files unless the user explicitly asked you to write.
+- You MUST NOT claim you created/modified/deleted anything unless a tool result says ok:true.
 - Never include code blocks or include explanations when calling tools.
 """
 
@@ -136,7 +138,13 @@ def main():
             messages.append(
                 {
                     "role": "user",
-                    "content": f"Tool result: {json.dumps(tool_result)}",
+                    "content": (
+                        "TOOL_RESULT:\n"
+                        f"{json.dumps(tool_result)}\n\n"
+                        "Now respond to the user in natural language with what you did. "
+                        "If ok=false, explain the error and ask a single concise follow-up if needed. "
+                        "Only call another tool if the user explicitly requested another action."
+                    ),
                 }
             )
 

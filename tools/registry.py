@@ -1,6 +1,8 @@
 from .write_file import run as write_file_run
 from .read_file import run as read_file_run
 from .list_dir import run as list_dir_run
+from .make_dir import run as make_dir_run
+from .delete_path import run as delete_path_run
 
 TOOL_REGISTRY = {
     "write_file": {
@@ -18,7 +20,6 @@ TOOL_REGISTRY = {
         },
         "runner": read_file_run,
     },
-
     "list_dir": {
         "description": "List files and folders in a directory (relative paths only).",
         "args": {
@@ -26,7 +27,20 @@ TOOL_REGISTRY = {
         },
         "runner": list_dir_run,
     },
-
+    "make_dir": {
+        "description": "Create a directory (and parents) safely within the root.",
+        "args": {
+            "path": 'string (example: "website" or "src/assets")',
+        },
+        "runner": make_dir_run,
+    },
+    "delete_path": {
+        "description": "Delete a file or an EMPTY directory safely within the root.",
+        "args": {
+            "path": 'string (example: "website.json" or "empty_folder")',
+        },
+        "runner": delete_path_run,
+    },
 }
 
 
