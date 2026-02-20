@@ -3,6 +3,8 @@ from .read_file import run as read_file_run
 from .list_dir import run as list_dir_run
 from .make_dir import run as make_dir_run
 from .delete_path import run as delete_path_run
+from .run_cmd import run as run_cmd_run
+from .git_cmd import run as git_cmd_run
 
 TOOL_REGISTRY = {
     "write_file": {
@@ -40,6 +42,25 @@ TOOL_REGISTRY = {
             "path": 'string (example: "website.json" or "empty_folder")',
         },
         "runner": delete_path_run,
+    },
+    "run_cmd": {
+        "description": "Run an allowed terminal command in the project root (no shell).",
+        "args": {
+            "cmd": 'list[string] (example: ["python","--version"] or ["pip","-V"])',
+            "cwd": 'string (optional, relative path; example: "." or "tools")',
+            "timeout_sec": "int (optional, 1-300; default 60)",
+        },
+        "runner": run_cmd_run,
+    },
+    "git_cmd": {
+        "description": "Run a restricted git command safely in the project root.",
+        "args": {
+            "subcommand": 'string (example: "status", "add", "commit", "push")',
+            "args": 'list[string] (optional; example: ["-sb"] or ["-m","msg"])',
+            "cwd": 'string (optional, relative path; default ".")',
+            "timeout_sec": "int (optional, 1-300; default 60)",
+        },
+        "runner": git_cmd_run,
     },
 }
 
