@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "baxter-cli"
+version = "0.1.0"
+description = "Baxter CLI - a terminal coding agent"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+baxter = "baxter.baxter_cli:main"

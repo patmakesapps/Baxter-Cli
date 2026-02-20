@@ -5,7 +5,7 @@ import urllib.request
 import urllib.error
 from dotenv import load_dotenv
 
-from tools.registry import render_registry_for_prompt, run_tool, TOOL_NAMES
+from baxter.tools.registry import render_registry_for_prompt, run_tool, TOOL_NAMES
 
 load_dotenv()
 
@@ -262,7 +262,11 @@ def preflight_tool_check(tool_call: dict):
     if tool == "git_cmd" and str(args.get("subcommand", "")).strip().lower() == "push":
         status_result = run_tool(
             "git_cmd",
-            {"subcommand": "status", "args": ["--porcelain"], "cwd": args.get("cwd", ".")},
+            {
+                "subcommand": "status",
+                "args": ["--porcelain"],
+                "cwd": args.get("cwd", "."),
+            },
         )
         if not status_result.get("ok"):
             return {
