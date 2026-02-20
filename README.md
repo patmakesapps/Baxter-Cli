@@ -1,5 +1,7 @@
 # Terminal Coding Agent (Baxter CLI)
 
+![Baxter CLI Banner](baxter.png)
+
 A lightweight CLI coding assistant that uses Groq Chat Completions and a local tool registry to safely read and write files, run restricted terminal commands, and perform constrained Git operations.
 
 ## Features
