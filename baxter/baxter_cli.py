@@ -11,6 +11,22 @@ load_dotenv()
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+BOOT_BANNER = r"""
+██████╗  █████╗ ██╗  ██╗████████╗███████╗██████╗
+██╔══██╗██╔══██╗╚██╗██╔╝╚══██╔══╝██╔════╝██╔══██╗
+██████╔╝███████║ ╚███╔╝    ██║   █████╗  ██████╔╝
+██╔══██╗██╔══██║ ██╔██╗    ██║   ██╔══╝  ██╔══██╗
+██████╔╝██║  ██║██╔╝ ██╗   ██║   ███████╗██║  ██║
+╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
+
+      ⟡ B A X T E R  •  Neural Reasoning Engine Online ⟡
+──────────────────────────────────────────────────────────
+  CORE: STABLE   |   TOOL MODULES: READY   |   SAFETY: ON
+──────────────────────────────────────────────────────────
+"""
+
 GREEN = "\033[32m"
 YELLOW = "\033[33m"
 RED = "\033[31m"
@@ -294,6 +310,8 @@ def main():
     system_prompt = build_system_prompt()
     messages = [{"role": "system", "content": system_prompt}]
 
+    os.system("cls" if os.name == "nt" else "clear")
+    print(_c(BOOT_BANNER, CYAN))
     print(_c("Has GROQ_API_KEY:", CYAN), bool(os.getenv("GROQ_API_KEY")))
     print("Type 'exit' to quit.\n")
     print("Display: compact (use /help for UI commands)\n")
