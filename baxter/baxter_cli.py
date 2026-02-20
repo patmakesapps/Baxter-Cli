@@ -311,8 +311,8 @@ def main():
     messages = [{"role": "system", "content": system_prompt}]
 
     os.system("cls" if os.name == "nt" else "clear")
-    print(_c(BOOT_BANNER, CYAN))
-    print(_c("Has GROQ_API_KEY:", CYAN), bool(os.getenv("GROQ_API_KEY")))
+    print(_c(BOOT_BANNER, GREEN))
+    print(_c("Has GROQ_API_KEY:", GREEN), bool(os.getenv("GROQ_API_KEY")))
     print("Type 'exit' to quit.\n")
     print("Display: compact (use /help for UI commands)\n")
 
