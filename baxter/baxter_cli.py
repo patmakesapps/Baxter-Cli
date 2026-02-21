@@ -403,7 +403,8 @@ def main():
                             ),
                         }
                     )
-                    continue
+                    print(tui.c("Tell Baxter what to do differently", tui.GREEN))
+                    break
                 else:
                     tool_result = run_tool(tool_call["tool"], tool_call["args"])
                     if (
