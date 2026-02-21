@@ -5,6 +5,7 @@ from .make_dir import run as make_dir_run
 from .delete_path import run as delete_path_run
 from .run_cmd import run as run_cmd_run
 from .git_cmd import run as git_cmd_run
+from .search_code import run as search_code_run
 
 TOOL_REGISTRY = {
     "write_file": {
@@ -61,6 +62,17 @@ TOOL_REGISTRY = {
             "timeout_sec": "int (optional, 1-300; default 60)",
         },
         "runner": git_cmd_run,
+    },
+    "search_code": {
+        "description": "Search code/files recursively for text matches.",
+        "args": {
+            "query": 'string (required; example: "render_registry_for_prompt")',
+            "path": 'string (optional, relative path; default ".")',
+            "case_sensitive": "bool (optional; default false)",
+            "max_results": "int (optional, 1-200; default 50)",
+            "include_hidden": "bool (optional; default false)",
+        },
+        "runner": search_code_run,
     },
 }
 

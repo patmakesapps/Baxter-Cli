@@ -2,12 +2,13 @@
 
 ![Baxter CLI Banner](baxter.png)
 
-A lightweight CLI coding assistant that uses Groq Chat Completions and a local tool registry to safely read and write files, run restricted terminal commands, and perform constrained Git operations.
+A lightweight CLI coding assistant with a provider-agnostic model layer and a local tool registry to safely read and write files, run restricted terminal commands, and perform constrained Git operations.
 
 ## Features
 
 - Interactive terminal chat loop
-- Groq API integration (`llama-3.1-8b-instant` default)
+- Provider-agnostic model integration (`groq`, `openai`, `anthropic`)
+- Session settings via `/settings` (provider/model switching)
 - Structured tool calling with chained tool steps
 - Local tools:
   - `read_file`
@@ -17,6 +18,7 @@ A lightweight CLI coding assistant that uses Groq Chat Completions and a local t
   - `delete_path`
   - `run_cmd`
   - `git_cmd`
+  - `search_code`
 - Safety protections:
   - Relative-path-only file access
   - Path traversal and root-escape prevention
@@ -34,6 +36,7 @@ A lightweight CLI coding assistant that uses Groq Chat Completions and a local t
 └─ baxter/
    ├─ __init__.py
    ├─ baxter_cli.py
+   ├─ providers.py
    └─ tools/
       ├─ registry.py
       ├─ safe_path.py
@@ -43,13 +46,14 @@ A lightweight CLI coding assistant that uses Groq Chat Completions and a local t
       ├─ make_dir.py
       ├─ delete_path.py
       ├─ run_cmd.py
-      └─ git_cmd.py
+      ├─ git_cmd.py
+      └─ search_code.py
 ```
 
 ## Requirements
 
 - Python 3.10+
-- Groq API key
+- At least one provider API key (`GROQ_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
 
 ## Setup
 
@@ -86,6 +90,8 @@ pip install -e .
 
 ```env
 GROQ_API_KEY=your_real_key_here
+OPENAI_API_KEY=your_real_key_here
+ANTHROPIC_API_KEY=your_real_key_here
 ```
 
 ## Run
@@ -102,7 +108,14 @@ or:
 python -m baxter.baxter_cli
 ```
 
-On startup, the CLI prints whether `GROQ_API_KEY` is present and enters interactive mode.
+On startup, the CLI prints API key availability for each provider and enters interactive mode.
+
+Settings commands:
+
+- `/settings`
+- `/settings provider <groq|openai|anthropic>`
+- `/settings model <model_name>`
+- `/settings reset-model`
 
 ## Tool Call Format
 
@@ -153,9 +166,12 @@ Additional protections:
 
 ## Troubleshooting
 
-- `GROQ_API_KEY is missing. Put it in .env and restart.`
-  - Ensure `.env` exists in repo root and includes `GROQ_API_KEY=...`
+- `<PROVIDER_API_KEY> is missing. Put it in .env and restart.`
+  - Ensure `.env` exists in repo root and includes at least one of:
+    - `GROQ_API_KEY=...`
+    - `OPENAI_API_KEY=...`
+    - `ANTHROPIC_API_KEY=...`
 - `git not found on PATH`
   - Install Git from `https://git-scm.com/` and restart the terminal
-- Groq HTTP errors
+- Provider HTTP errors
   - Check API key, connectivity, and model name
