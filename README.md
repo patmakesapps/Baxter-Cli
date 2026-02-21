@@ -172,6 +172,8 @@ ANTHROPIC_API_KEY=...
 # OPENAI_MODELS_ALLOWLIST=gpt-4o-mini,gpt-5-mini,codex-3.5
 ```
 
+If keys are missing on startup, Baxter now offers an interactive one-time setup prompt and writes keys to `~/.baxter/.env`.
+
 3. Open any project folder and run:
 
 ```bash

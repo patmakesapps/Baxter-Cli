@@ -75,6 +75,88 @@ MUTATING_REQUEST_HINTS = (
 )
 
 
+def _user_env_path() -> str | None:
+    home = os.path.expanduser("~")
+    if not home or home == "~":
+        return None
+    return os.path.join(home, ".baxter", ".env")
+
+
+def _parse_env_file(path: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not os.path.isfile(path):
+        return values
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                key = k.strip()
+                if key:
+                    values[key] = v.strip()
+    except Exception:
+        return values
+    return values
+
+
+def _write_env_file(path: str, values: dict[str, str]) -> None:
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    lines = [f"{k}={v}" for k, v in values.items() if isinstance(k, str) and isinstance(v, str)]
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + ("\n" if lines else ""))
+
+
+def maybe_prompt_api_key_setup() -> None:
+    if provider_has_key("anthropic") or provider_has_key("openai") or provider_has_key("groq"):
+        return
+    env_path = _user_env_path()
+    if not env_path:
+        return
+
+    print(
+        tui.c(
+            "No provider API keys found. Configure now for one-time setup in ~/.baxter/.env.",
+            tui.YELLOW,
+        )
+    )
+    answer = input("Set up API keys now? [Y/n]: ").strip().lower()
+    if answer in {"n", "no"}:
+        return
+
+    existing = _parse_env_file(env_path)
+    wrote_any = False
+    for provider in ("openai", "anthropic", "groq"):
+        env_key = str(PROVIDERS[provider]["env_key"])
+        current = os.getenv(env_key, "").strip()
+        prompt = f"Enter {env_key}"
+        if current:
+            prompt += " (press Enter to keep current)"
+        prompt += ", or leave blank to skip: "
+        raw = input(prompt).strip()
+        if raw:
+            existing[env_key] = raw
+            os.environ[env_key] = raw
+            wrote_any = True
+        elif current:
+            existing[env_key] = current
+            wrote_any = True
+
+    if not wrote_any:
+        print(tui.c("No keys were entered. You can configure later in ~/.baxter/.env.", tui.YELLOW))
+        return
+
+    try:
+        _write_env_file(env_path, existing)
+        load_dotenv(dotenv_path=env_path, override=True)
+        print(tui.c(f"Saved key config to {env_path}", tui.GREEN))
+    except Exception as e:
+        print(tui.c(f"Could not write key config: {e}", tui.RED))
+
+
 def build_system_prompt() -> str:
     return f"""You are Baxter, a helpful coding assistant.
 
@@ -290,6 +372,7 @@ def should_enforce_readonly_guard(session: dict) -> bool:
 
 
 def main():
+    maybe_prompt_api_key_setup()
     system_prompt = build_system_prompt()
     messages = [{"role": "system", "content": system_prompt}]
 
