@@ -424,7 +424,10 @@ def requires_confirmation(tool_call: dict):
     if tool == "apply_diff":
         return True, f'Confirm apply_diff to "{args.get("path", "")}"? [y/N] (press p to preview): '
     if tool == "write_file" and bool(args.get("overwrite", False)):
-        return True, f'Confirm overwrite write_file for "{args.get("path", "")}"? [y/N]: '
+        return (
+            True,
+            f'Confirm overwrite write_file for "{args.get("path", "")}"? [y/N] (press p to preview): ',
+        )
     if tool == "git_cmd":
         sub = str(args.get("subcommand", "")).strip().lower()
         if sub == "push":
@@ -486,6 +489,51 @@ def get_apply_diff_preview_text(tool_call: dict) -> str:
     return "\n".join(parts)
 
 
+def get_write_file_overwrite_preview_text(tool_call: dict) -> str:
+    args = tool_call.get("args", {}) or {}
+    path = args.get("path")
+    content = args.get("content", "")
+    overwrite = bool(args.get("overwrite", False))
+
+    if not overwrite:
+        return "Cannot preview overwrite diff: overwrite=true was not set."
+    if not isinstance(path, str) or path.strip() == "":
+        return "Cannot preview overwrite diff: missing/invalid path."
+    if not isinstance(content, str):
+        return "Cannot preview overwrite diff: content must be a string."
+
+    try:
+        full_path = resolve_in_root(path)
+    except Exception as e:
+        return f"Cannot preview overwrite diff: {e}"
+
+    if not os.path.exists(full_path):
+        return (
+            f'Cannot preview overwrite diff: "{path}" does not exist yet. '
+            "This write will create a new file."
+        )
+
+    try:
+        with open(full_path, "r", encoding="utf-8") as f:
+            original = f.read()
+    except Exception as e:
+        return f"Cannot preview overwrite diff: {e}"
+
+    updated = content
+    diff_lines = list(
+        difflib.unified_diff(
+            original.splitlines(),
+            updated.splitlines(),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+            lineterm="",
+        )
+    )
+    if not diff_lines:
+        return "No diff changes."
+    return "\n".join(diff_lines)
+
+
 def print_preview_with_count(diff_text: str) -> int:
     lines = diff_text.splitlines()
     if not lines:
@@ -510,7 +558,26 @@ def clear_rendered_lines(line_count: int) -> None:
 
 
 def ask_confirmation(prompt: str, tool_call: dict | None = None) -> bool:
-    if tool_call and tool_call.get("tool") == "apply_diff" and IS_WINDOWS and sys.stdin.isatty():
+    def preview_text_for_tool(tc: dict) -> str:
+        tool = tc.get("tool")
+        if tool == "apply_diff":
+            return get_apply_diff_preview_text(tc)
+        if tool == "write_file" and bool((tc.get("args") or {}).get("overwrite", False)):
+            return get_write_file_overwrite_preview_text(tc)
+        return "Preview is not available for this tool."
+
+    can_preview = bool(
+        tool_call
+        and (
+            tool_call.get("tool") == "apply_diff"
+            or (
+                tool_call.get("tool") == "write_file"
+                and bool((tool_call.get("args") or {}).get("overwrite", False))
+            )
+        )
+    )
+
+    if can_preview and IS_WINDOWS and sys.stdin.isatty():
         import msvcrt
 
         preview_visible = False
@@ -537,7 +604,7 @@ def ask_confirmation(prompt: str, tool_call: dict | None = None) -> bool:
                 if not preview_visible:
                     sys.stdout.write("\n")
                     sys.stdout.flush()
-                    preview_text = get_apply_diff_preview_text(tool_call)
+                    preview_text = preview_text_for_tool(tool_call)
                     preview_line_count = print_preview_with_count(preview_text)
                     preview_visible = True
                 else:
@@ -557,7 +624,7 @@ def ask_confirmation(prompt: str, tool_call: dict | None = None) -> bool:
             return True
         if answer in {"", "n", "no"}:
             return False
-        if answer == "p" and tool_call and tool_call.get("tool") == "apply_diff":
-            print_colored_diff(get_apply_diff_preview_text(tool_call))
+        if answer == "p" and can_preview:
+            print_colored_diff(preview_text_for_tool(tool_call))
             continue
         print("Enter y, n, or p.")
