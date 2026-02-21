@@ -25,13 +25,13 @@ A local terminal coding assistant with provider switching, tool-calling, and saf
 - `openai`
   - `gpt-4o-mini` (default)
   - `gpt-5-mini`
-  - `codex-3.5`
 - `groq`
   - `llama-3.1-8b-instant` (default)
 
 Notes:
 - OpenAI model IDs are fetched from `/v1/models` and intersected with the allowlist above.
 - You can override the OpenAI allowlist with `OPENAI_MODELS_ALLOWLIST` (comma-separated IDs).
+- Codex models are not currently supported in `v0.1.2`.
 
 ## Tooling
 
@@ -64,13 +64,8 @@ Baxter asks `y/N` confirmation before:
 
 ## CLI Commands
 
-- `/` opens interactive provider/model picker
-- `/providers` (alias: `/settings`)
-- `/provider <groq|openai|anthropic>`
-- `/models`
-- `/model <model_name>`
-- `/lastdiff` (expand the last `apply_diff` unified diff)
-- `/help`
+- `/models` opens interactive provider/model picker
+- `/apikeys` opens API key setup/update flow
 
 ## Project Layout
 
@@ -144,20 +139,28 @@ GROQ_API_KEY=...
 OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...
 # optional:
-# OPENAI_MODELS_ALLOWLIST=gpt-4o-mini,gpt-5-mini,codex-3.5
+# OPENAI_MODELS_ALLOWLIST=gpt-4o-mini,gpt-5-mini
 ```
 
 The CLI also loads user-level keys from `~/.baxter/.env` first, then applies project `.env` as an override.
 
 ## Setup (User install via pip)
 
-1. Install Baxter:
+Current PyPI release: `baxter-cli==0.1.2`
+
+1. Install (or pin to this release):
 
 ```bash
-pip install baxter-cli
+pip install baxter-cli==0.1.2
 ```
 
-2. Configure keys once per machine in:
+2. Upgrade later:
+
+```bash
+pip install -U baxter-cli
+```
+
+3. Configure keys once per machine in:
 
 - Windows: `%USERPROFILE%\.baxter\.env`
 - macOS/Linux: `~/.baxter/.env`
@@ -169,12 +172,12 @@ GROQ_API_KEY=...
 OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...
 # optional:
-# OPENAI_MODELS_ALLOWLIST=gpt-4o-mini,gpt-5-mini,codex-3.5
+# OPENAI_MODELS_ALLOWLIST=gpt-4o-mini,gpt-5-mini
 ```
 
 If keys are missing on startup, Baxter now offers an interactive one-time setup prompt and writes keys to `~/.baxter/.env`.
 
-3. Open any project folder and run:
+4. Open any project folder and run:
 
 ```bash
 baxter

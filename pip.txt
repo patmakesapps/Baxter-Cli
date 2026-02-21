@@ -7,7 +7,7 @@ pip install baxter-cli
 pip install -U baxter-cli
 
 # Install a specific version
-pip install baxter-cli==0.1.1
+pip install baxter-cli==0.1.2
 
 # Uninstall
 pip uninstall baxter-cli
