@@ -1,10 +1,12 @@
 import json
 import os
 import re
+import shutil
 import sys
 import threading
 import time
 import difflib
+import textwrap
 
 from dotenv import load_dotenv
 
@@ -84,6 +86,7 @@ TOOL CALL RULES:
 - If the user asks to delete/remove a file or folder, you MUST call delete_path.
 - If the user asks to create a NEW file, you MUST call write_file.
 - If the user asks to change/edit/modify a file, you MUST call read_file first, then apply_diff.
+- If a file path is unknown (example: user only says "edit index.html"), call search_code first with the filename to locate the correct relative path.
 - Only use write_file with overwrite=true for full rewrites when apply_diff is not suitable.
 - If the user asks to run a terminal command, you MUST call run_cmd (only allowed commands will work).
 - If the user asks to do git actions (status/add/commit/push/pull/etc), you MUST call git_cmd.
@@ -193,9 +196,65 @@ def last_n_turns(messages, n_turns=6):
 def _clip(text: str, max_chars: int = 800) -> str:
     if text is None:
         return ""
+    raw_limit = os.getenv("BAXTER_CLIP_CHARS", "").strip()
+    if raw_limit:
+        try:
+            max_chars = int(raw_limit)
+        except ValueError:
+            max_chars = 0
+    if max_chars <= 0:
+        return text
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + "\n...[truncated]"
+
+
+def _terminal_width(default: int = 100) -> int:
+    try:
+        return max(60, shutil.get_terminal_size((default, 24)).columns)
+    except Exception:
+        return default
+
+
+def _wrap_line(line: str, width: int, indent: str = "") -> list[str]:
+    if not line:
+        return [indent]
+    if len(line) <= width:
+        return [f"{indent}{line}"]
+    wrapped = textwrap.wrap(
+        line,
+        width=max(20, width - len(indent)),
+        break_long_words=False,
+        break_on_hyphens=False,
+        replace_whitespace=False,
+        drop_whitespace=False,
+    )
+    if not wrapped:
+        return [indent]
+    return [f"{indent}{part}" for part in wrapped]
+
+
+def _strip_markdown(text: str) -> str:
+    cleaned = text
+    cleaned = re.sub(r"^#{1,6}\s*", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"__(.*?)__", r"\1", cleaned)
+    cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
+    return cleaned
+
+
+def print_assistant_reply(reply: str) -> None:
+    label = f"▢ {_c('Baxter:', GREEN)} "
+    width = _terminal_width()
+    body_width = max(20, width - len("▢ Baxter: "))
+    cleaned = _strip_markdown(reply or "")
+    lines = cleaned.splitlines() or [""]
+
+    print(label + (_wrap_line(lines[0], body_width)[0] if lines[0] else ""))
+    for line in lines[1:]:
+        wrapped = _wrap_line(line, width)
+        for chunk in wrapped:
+            print(chunk)
 
 
 def print_tool_event(tool_call: dict, index: int) -> None:
@@ -229,12 +288,17 @@ def print_tool_result(tool_result: dict) -> None:
 
     stdout = _clip(str(tool_result.get("stdout", "")).strip())
     stderr = _clip(str(tool_result.get("stderr", "")).strip())
+    width = _terminal_width()
     if stdout:
         print("  stdout:")
-        print(stdout)
+        for line in stdout.splitlines():
+            for chunk in _wrap_line(line, width, "    "):
+                print(chunk)
     if stderr:
         print("  stderr:")
-        print(stderr)
+        for line in stderr.splitlines():
+            for chunk in _wrap_line(line, width, "    "):
+                print(chunk)
     if tool_result.get("diff_available"):
         added = int(tool_result.get("added_lines", 0))
         removed = int(tool_result.get("removed_lines", 0))
@@ -247,7 +311,12 @@ def print_tool_result(tool_result: dict) -> None:
 
 
 def print_separator(label: str) -> None:
-    print(_c(f"\n--- {label} ---", GREEN))
+    width = _terminal_width()
+    text = f" {label} "
+    rail = max(4, width - len(text))
+    left = rail // 2
+    right = rail - left
+    print(_c("\n" + ("-" * left) + text + ("-" * right), GREEN))
 
 
 class _WorkingIndicator:
@@ -768,7 +837,7 @@ def main():
                         }
                     )
                     continue
-                print(f"▢ {_c('Baxter:', GREEN)}", reply)
+                print_assistant_reply(reply)
                 break
 
             tool_index += 1

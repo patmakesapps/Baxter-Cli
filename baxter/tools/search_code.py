@@ -40,7 +40,13 @@ def _parse_rg_line(line: str):
     return file_part, line_num, col_num, text_part
 
 
-def _search_with_rg(full_path: str, query: str, case_sensitive: bool, max_results: int, include_hidden: bool):
+def _search_with_rg(
+    full_path: str,
+    query: str,
+    case_sensitive: bool,
+    max_results: int,
+    include_hidden: bool,
+):
     cmd = ["rg", "--no-heading", "--line-number", "--column", query, "."]
     if not case_sensitive:
         cmd.insert(1, "-i")
@@ -82,7 +88,13 @@ def _search_with_rg(full_path: str, query: str, case_sensitive: bool, max_result
     return {"ok": True, "matches": matches, "truncated": truncated, "engine": "rg"}
 
 
-def _search_with_python(full_path: str, query: str, case_sensitive: bool, max_results: int, include_hidden: bool):
+def _search_with_python(
+    full_path: str,
+    query: str,
+    case_sensitive: bool,
+    max_results: int,
+    include_hidden: bool,
+):
     needle = query if case_sensitive else query.lower()
     matches = []
     truncated = False
@@ -114,7 +126,12 @@ def _search_with_python(full_path: str, query: str, case_sensitive: bool, max_re
                         )
                         if len(matches) >= max_results:
                             truncated = True
-                            return {"ok": True, "matches": matches, "truncated": truncated, "engine": "python"}
+                            return {
+                                "ok": True,
+                                "matches": matches,
+                                "truncated": truncated,
+                                "engine": "python",
+                            }
             except Exception:
                 continue
 
@@ -143,9 +160,13 @@ def run(args: dict) -> dict:
 
     try:
         if shutil.which("rg"):
-            result = _search_with_rg(full_path, query, case_sensitive, max_results, include_hidden)
+            result = _search_with_rg(
+                full_path, query, case_sensitive, max_results, include_hidden
+            )
         else:
-            result = _search_with_python(full_path, query, case_sensitive, max_results, include_hidden)
+            result = _search_with_python(
+                full_path, query, case_sensitive, max_results, include_hidden
+            )
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "search timed out after 60s"}
     except Exception as e:
