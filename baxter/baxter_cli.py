@@ -13,7 +13,20 @@ from baxter.providers import (
 )
 from baxter.tools.registry import TOOL_NAMES, render_registry_for_prompt, run_tool
 
-load_dotenv(override=True)
+
+def load_baxter_env() -> None:
+    # 1) Load machine-level Baxter config for one-time key setup.
+    home = os.path.expanduser("~")
+    if home and home != "~":
+        user_env = os.path.join(home, ".baxter", ".env")
+        if os.path.isfile(user_env):
+            load_dotenv(dotenv_path=user_env, override=False)
+
+    # 2) Load per-project overrides from cwd.
+    load_dotenv(override=True)
+
+
+load_baxter_env()
 
 BOOT_BANNER = r"""
 ██████╗  █████╗ ██╗  ██╗████████╗███████╗██████╗
@@ -108,7 +121,8 @@ def pick_startup_provider() -> str:
     print(
         tui.c(
             "WARNING: No provider API keys found. "
-            "Please set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY in .env",
+            "Set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY in "
+            "~/.baxter/.env (or .env in the current folder).",
             tui.YELLOW,
         )
     )

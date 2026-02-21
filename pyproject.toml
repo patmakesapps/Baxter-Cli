@@ -8,9 +8,24 @@ version = "0.1.0"
 description = "Baxter CLI - a terminal coding agent"
 readme = "README.md"
 requires-python = ">=3.10"
+authors = [
+  { name = "Baxter" },
+]
+license = { text = "Proprietary" }
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Environment :: Console",
+]
 dependencies = [
   "python-dotenv>=1.0.0",
 ]
 
 [project.scripts]
 baxter = "baxter.baxter_cli:main"
+
+[tool.setuptools.packages.find]
+include = ["baxter*"]

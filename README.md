@@ -69,7 +69,6 @@ Baxter asks `y/N` confirmation before:
 - `/provider <groq|openai|anthropic>`
 - `/models`
 - `/model <model_name>`
-- `/model default`
 - `/lastdiff` (expand the last `apply_diff` unified diff)
 - `/help`
 
@@ -107,7 +106,7 @@ Baxter asks `y/N` confirmation before:
   - `OPENAI_API_KEY`
   - `GROQ_API_KEY`
 
-## Setup
+## Setup (Developer)
 
 1. Create and activate a virtual environment.
 
@@ -148,7 +147,75 @@ ANTHROPIC_API_KEY=...
 # OPENAI_MODELS_ALLOWLIST=gpt-4o-mini,gpt-5-mini,codex-3.5
 ```
 
-The CLI uses `load_dotenv(override=True)`, so `.env` values override stale shell-level env vars.
+The CLI also loads user-level keys from `~/.baxter/.env` first, then applies project `.env` as an override.
+
+## Setup (User install via pip)
+
+1. Install Baxter:
+
+```bash
+pip install baxter-cli
+```
+
+2. Configure keys once per machine in:
+
+- Windows: `%USERPROFILE%\.baxter\.env`
+- macOS/Linux: `~/.baxter/.env`
+
+Example:
+
+```env
+GROQ_API_KEY=...
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+# optional:
+# OPENAI_MODELS_ALLOWLIST=gpt-4o-mini,gpt-5-mini,codex-3.5
+```
+
+3. Open any project folder and run:
+
+```bash
+baxter
+```
+
+## Environment Setup Smoke Test
+
+Use this to verify first-run key loading and precedence.
+
+1. Missing keys path:
+
+```powershell
+Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:GROQ_API_KEY -ErrorAction SilentlyContinue
+Remove-Item "$HOME\.baxter\.env" -ErrorAction SilentlyContinue
+baxter
+```
+
+Expected: startup warning about missing keys.
+
+2. User-level key file path:
+
+```powershell
+mkdir $HOME\.baxter -Force
+@"
+OPENAI_API_KEY=your_real_key
+"@ | Set-Content "$HOME\.baxter\.env"
+baxter
+```
+
+Expected: no missing-key warning.
+
+3. Project-level override path:
+
+```powershell
+@"
+GROQ_API_KEY=your_real_groq_key
+"@ | Set-Content ".env"
+baxter
+```
+
+Expected: local `.env` values override user-level values for overlapping keys.
 
 ## Run
 
