@@ -1,8 +1,10 @@
 import json
 import os
+import re
 import sys
 import threading
 import time
+import difflib
 
 from dotenv import load_dotenv
 
@@ -14,6 +16,7 @@ from baxter.providers import (
     provider_has_key,
 )
 from baxter.tools.registry import TOOL_NAMES, render_registry_for_prompt, run_tool
+from baxter.tools.safe_path import resolve_in_root
 
 load_dotenv(override=True)
 
@@ -35,6 +38,7 @@ GREEN = "\033[32m"
 YELLOW = "\033[33m"
 RED = "\033[31m"
 DIM = "\033[2m"
+UNDERLINE = "\033[4m"
 RESET = "\033[0m"
 IS_WINDOWS = os.name == "nt"
 
@@ -52,6 +56,12 @@ def _c(text: str, color: str) -> str:
     if not _supports_color():
         return text
     return f"{color}{text}{RESET}"
+
+
+def _cu(text: str, color: str) -> str:
+    if not _supports_color():
+        return text
+    return f"{color}{UNDERLINE}{text}{RESET}"
 
 
 def build_system_prompt() -> str:
@@ -122,6 +132,42 @@ def try_parse_tool_call(text: str):
             i = start + max(1, end)
         except Exception:
             i = start + 1
+
+    # Support XML-like tool call blocks some models emit, e.g.:
+    # <function_calls><invoke name="read_file"><parameter name="path">README.md</parameter></invoke></function_calls>
+    invoke_match = re.search(
+        r"<invoke\s+name=\"([^\"]+)\"\s*>(.*?)</invoke>",
+        text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    if invoke_match:
+        tool_name = invoke_match.group(1).strip()
+        invoke_body = invoke_match.group(2)
+        args: dict = {}
+        for p in re.finditer(
+            r"<parameter\s+name=\"([^\"]+)\"\s*>(.*?)</parameter>",
+            invoke_body,
+            flags=re.DOTALL | re.IGNORECASE,
+        ):
+            key = p.group(1).strip()
+            raw_val = p.group(2).strip()
+            val: object = raw_val
+            low = raw_val.lower()
+            if low in {"true", "false"}:
+                val = low == "true"
+            elif re.fullmatch(r"-?\d+", raw_val):
+                try:
+                    val = int(raw_val)
+                except Exception:
+                    val = raw_val
+            elif raw_val.startswith("[") or raw_val.startswith("{"):
+                try:
+                    val = json.loads(raw_val)
+                except Exception:
+                    val = raw_val
+            args[key] = val
+        if tool_name and isinstance(args, dict):
+            return {"tool": tool_name, "args": args}
     return None
 
 
@@ -192,7 +238,12 @@ def print_tool_result(tool_result: dict) -> None:
     if tool_result.get("diff_available"):
         added = int(tool_result.get("added_lines", 0))
         removed = int(tool_result.get("removed_lines", 0))
-        print(_c(f"  diff: view +/-  (+{added} -{removed})  use /lastdiff", GREEN))
+        print(
+            "  diff:",
+            _cu("view +/-", GREEN),
+            _c(f"(+{added} -{removed})", GREEN),
+            _c("type v or /lastdiff", DIM),
+        )
 
 
 def print_separator(label: str) -> None:
@@ -260,6 +311,7 @@ def _print_help() -> None:
     print(_c("  /models", GREEN))
     print(_c("  /model <model_name>", GREEN))
     print(_c("  /model default", GREEN))
+    print(_c("  v          (alias for /lastdiff)", GREEN))
     print(_c("  /lastdiff  (show last apply_diff unified diff)", GREEN))
     print(_c("  /settings  (alias for /providers)", GREEN))
     print(_c("  /help", GREEN))
@@ -426,7 +478,7 @@ def handle_ui_command(text: str, session: dict) -> bool:
         _print_providers(session)
         return True
 
-    if t == "/lastdiff":
+    if t in {"/lastdiff", "v", "view", "view +/-"}:
         last = session.get("last_diff")
         if not isinstance(last, str) or not last.strip():
             print("No diff available yet.")
@@ -474,7 +526,7 @@ def requires_confirmation(tool_call: dict):
     if tool == "delete_path":
         return True, f'Confirm delete_path for "{args.get("path", "")}"? [y/N]: '
     if tool == "apply_diff":
-        return True, f'Confirm apply_diff to "{args.get("path", "")}"? [y/N]: '
+        return True, f'Confirm apply_diff to "{args.get("path", "")}"? [y/N] (press p to preview): '
     if tool == "write_file" and bool(args.get("overwrite", False)):
         return True, f'Confirm overwrite write_file for "{args.get("path", "")}"? [y/N]: '
     if tool == "git_cmd":
@@ -486,8 +538,130 @@ def requires_confirmation(tool_call: dict):
     return False, ""
 
 
-def ask_confirmation(prompt: str) -> bool:
-    return input(prompt).strip().lower() in {"y", "yes"}
+def _get_apply_diff_preview_text(tool_call: dict) -> str:
+    args = tool_call.get("args", {}) or {}
+    path = args.get("path")
+    find = args.get("find")
+    replace = args.get("replace", "")
+    replace_all = bool(args.get("replace_all", False))
+
+    if not isinstance(path, str) or not isinstance(find, str) or find == "":
+        return "Cannot preview diff: missing path/find."
+    if not isinstance(replace, str):
+        return "Cannot preview diff: replace must be a string."
+
+    try:
+        full_path = resolve_in_root(path)
+        with open(full_path, "r", encoding="utf-8") as f:
+            original = f.read()
+    except Exception as e:
+        return f"Cannot preview diff: {e}"
+
+    hits = original.count(find)
+    if hits == 0:
+        return f'Cannot preview diff: find text not found in "{path}".'
+    notes = []
+    if not replace_all and hits > 1:
+        notes.append(
+            f'Preview note: find text matches {hits} locations in "{path}". '
+            "Only first match will be replaced."
+        )
+
+    if replace_all:
+        updated = original.replace(find, replace)
+    else:
+        updated = original.replace(find, replace, 1)
+
+    diff_lines = list(
+        difflib.unified_diff(
+            original.splitlines(),
+            updated.splitlines(),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+            lineterm="",
+        )
+    )
+    if not diff_lines:
+        return "No diff changes."
+    parts = []
+    if notes:
+        parts.extend(notes)
+    parts.append("\n".join(diff_lines))
+    return "\n".join(parts)
+
+
+def _print_preview_with_count(diff_text: str) -> int:
+    lines = diff_text.splitlines()
+    if not lines:
+        print("No diff changes.")
+        return 1
+    _print_colored_diff(diff_text)
+    return len(lines)
+
+
+def _clear_rendered_lines(line_count: int) -> None:
+    if line_count <= 0:
+        return
+    if not _supports_color():
+        print(_c("[preview hidden]", DIM))
+        return
+    # Move to the first preview line, clear each line, then return to prompt row.
+    sys.stdout.write(f"\033[{line_count}F")
+    for _ in range(line_count):
+        sys.stdout.write("\r\033[K\n")
+    if line_count > 0:
+        sys.stdout.write(f"\033[{line_count}F")
+    sys.stdout.flush()
+
+
+def ask_confirmation(prompt: str, tool_call: dict | None = None) -> bool:
+    if tool_call and tool_call.get("tool") == "apply_diff" and IS_WINDOWS and sys.stdin.isatty():
+        import msvcrt
+
+        preview_visible = False
+        preview_line_count = 0
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        while True:
+            ch = msvcrt.getwch().lower()
+            if ch in {"y"}:
+                if preview_visible and preview_line_count:
+                    _clear_rendered_lines(preview_line_count)
+                sys.stdout.write("y\n")
+                sys.stdout.flush()
+                return True
+            if ch in {"n", "\r", "\n", "\x1b"}:
+                if preview_visible and preview_line_count:
+                    _clear_rendered_lines(preview_line_count)
+                sys.stdout.write("n\n")
+                sys.stdout.flush()
+                return False
+            if ch == "p":
+                if not preview_visible:
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    preview_text = _get_apply_diff_preview_text(tool_call)
+                    preview_line_count = _print_preview_with_count(preview_text)
+                    preview_visible = True
+                else:
+                    _clear_rendered_lines(preview_line_count)
+                    preview_visible = False
+                    preview_line_count = 0
+                sys.stdout.write(prompt)
+                sys.stdout.flush()
+                continue
+        # unreachable
+
+    while True:
+        answer = input(prompt).strip().lower()
+        if answer in {"y", "yes"}:
+            return True
+        if answer in {"", "n", "no"}:
+            return False
+        if answer == "p" and tool_call and tool_call.get("tool") == "apply_diff":
+            _preview_apply_diff(tool_call)
+            continue
+        print("Enter y, n, or p.")
 
 
 def preflight_tool_check(tool_call: dict):
@@ -606,7 +780,7 @@ def main():
                 tool_result = precheck_result
             else:
                 needs_confirm, confirm_prompt = requires_confirmation(tool_call)
-                if needs_confirm and not ask_confirmation(confirm_prompt):
+                if needs_confirm and not ask_confirmation(confirm_prompt, tool_call):
                     tool_result = {
                         "ok": False,
                         "error": "action canceled by user",
