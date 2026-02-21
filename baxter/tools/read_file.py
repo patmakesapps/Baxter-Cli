@@ -6,6 +6,11 @@ def run(args: dict) -> dict:
     path = args.get("path")
     if not isinstance(path, str) or path.strip() == "":
         return {"ok": False, "error": "missing/invalid path"}
+    if path.strip() in {".", "./", ".\\"}:
+        return {
+            "ok": False,
+            "error": 'path "." is a directory; use list_dir for directories or provide a file path',
+        }
     try:
         full_path, candidates = resolve_file_path_in_root(path)
     except Exception as e:

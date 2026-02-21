@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import subprocess
 
@@ -138,6 +139,63 @@ def _search_with_python(
     return {"ok": True, "matches": matches, "truncated": truncated, "engine": "python"}
 
 
+def _extract_query_terms(query: str) -> list[str]:
+    parts = re.findall(r"[A-Za-z0-9_.-]+", query or "")
+    terms: list[str] = []
+    for part in parts:
+        token = part.strip()
+        if len(token) < 3:
+            continue
+        low = token.lower()
+        if low in {"the", "and", "for", "with", "from", "that", "this", "file", "code"}:
+            continue
+        if token not in terms:
+            terms.append(token)
+    return terms[:6]
+
+
+def _search_filenames(
+    full_path: str,
+    queries: list[str],
+    case_sensitive: bool,
+    max_results: int,
+    include_hidden: bool,
+) -> list[dict]:
+    matches: list[dict] = []
+    seen: set[str] = set()
+    needles = [q for q in queries if isinstance(q, str) and q.strip()]
+    if not needles:
+        return matches
+
+    norm_needles = needles if case_sensitive else [n.lower() for n in needles]
+    for base, dirs, files in os.walk(full_path, topdown=True):
+        dirs[:] = [d for d in dirs if d != ".git"]
+        if not include_hidden:
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for filename in files:
+            if not include_hidden and filename.startswith("."):
+                continue
+            abs_file = os.path.join(base, filename)
+            rel_file = _project_relpath(abs_file)
+            haystack = rel_file if case_sensitive else rel_file.lower()
+            if not any(n in haystack for n in norm_needles):
+                continue
+            if rel_file in seen:
+                continue
+            seen.add(rel_file)
+            matches.append(
+                {
+                    "file": rel_file,
+                    "line": 1,
+                    "column": 1,
+                    "text": "[filename match]",
+                }
+            )
+            if len(matches) >= max_results:
+                return matches
+    return matches
+
+
 def run(args: dict) -> dict:
     query = args.get("query")
     path = args.get("path", ".")
@@ -175,6 +233,26 @@ def run(args: dict) -> dict:
     if not result.get("ok"):
         return result
 
+    matches = list(result.get("matches", []))
+    engine = str(result.get("engine", ""))
+    truncated = bool(result.get("truncated"))
+
+    # Fallback for discovery tasks: if content search is empty, search filenames too.
+    if not matches:
+        fallback_queries = [query]
+        fallback_queries.extend(_extract_query_terms(query))
+        filename_matches = _search_filenames(
+            full_path=full_path,
+            queries=fallback_queries,
+            case_sensitive=case_sensitive,
+            max_results=max_results,
+            include_hidden=include_hidden,
+        )
+        if filename_matches:
+            matches = filename_matches
+            engine = f"{engine}+filename" if engine else "filename"
+            truncated = len(matches) >= max_results
+
     return {
         "ok": True,
         "path": path,
@@ -182,8 +260,8 @@ def run(args: dict) -> dict:
         "case_sensitive": case_sensitive,
         "include_hidden": include_hidden,
         "max_results": max_results,
-        "matches": result["matches"],
-        "count": len(result["matches"]),
-        "truncated": bool(result.get("truncated")),
-        "engine": result.get("engine"),
+        "matches": matches,
+        "count": len(matches),
+        "truncated": truncated,
+        "engine": engine,
     }

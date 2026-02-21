@@ -87,15 +87,20 @@ TOOL CALL RULES:
 - If the user asks to create a NEW file, you MUST call write_file.
 - If the user asks to change/edit/modify a file, you MUST call read_file first, then apply_diff.
 - If a file path is unknown (example: user only says "edit index.html"), call search_code first with the filename to locate the correct relative path.
+- For search_code, use short search terms (filename, symbol, or key phrase), not the user's entire sentence.
 - Only use write_file with overwrite=true for full rewrites when apply_diff is not suitable.
 - If the user asks to run a terminal command, you MUST call run_cmd (only allowed commands will work).
 - If the user asks to do git actions (status/add/commit/push/pull/etc), you MUST call git_cmd.
 - If the user asks to search the codebase/files for text or symbols, you MUST call search_code.
 - If the user asks to "commit and push" (or equivalent), you MUST do: git add -> git commit -> git push.
+- If the user asks you to commit changes, you MUST run git add and git commit yourself via git_cmd; do not ask the user to run commands.
+- If a commit message is not provided, use a concise default commit message that matches the change.
 - You MUST NOT call git push if there are uncommitted changes.
 - Before any git push, ensure the latest git commit step succeeded (exit_code 0).
 - If replying with instructions, use numbered or bullet points.
 - You MUST NOT claim you created/modified/deleted anything unless a tool result says ok:true.
+- read_file, list_dir, and search_code do not modify files; never claim code was changed after those tools.
+- When the user asks for an edit/fix, keep calling tools until the edit is actually applied (or you are blocked).
 - Never include code blocks or include explanations when calling tools.
 """
 
@@ -111,6 +116,14 @@ def pick_startup_provider() -> str:
     for name in ("anthropic", "openai", "groq"):
         if provider_has_key(name):
             return name
+    # Fallback: no providers configured
+    print(
+        _c(
+            "WARNING: No provider API keys found. "
+            "Please set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY in .env",
+            YELLOW,
+        )
+    )
     return "anthropic"
 
 
@@ -513,7 +526,7 @@ def read_user_input(session: dict) -> str | None:
             _ = msvcrt.getwch()
             continue
         if ch == "\x03":
-            raise KeyboardInterrupt
+            raise SystemExit(130)
         if ch == "\b":
             if buf:
                 buf = buf[:-1]
@@ -693,6 +706,8 @@ def ask_confirmation(prompt: str, tool_call: dict | None = None) -> bool:
         sys.stdout.flush()
         while True:
             ch = msvcrt.getwch().lower()
+            if ch == "\x03":
+                raise SystemExit(130)
             if ch in {"y"}:
                 if preview_visible and preview_line_count:
                     _clear_rendered_lines(preview_line_count)
@@ -722,7 +737,10 @@ def ask_confirmation(prompt: str, tool_call: dict | None = None) -> bool:
         # unreachable
 
     while True:
-        answer = input(prompt).strip().lower()
+        try:
+            answer = input(prompt).strip().lower()
+        except KeyboardInterrupt:
+            raise SystemExit(130)
         if answer in {"y", "yes"}:
             return True
         if answer in {"", "n", "no"}:
@@ -790,8 +808,7 @@ def main():
         try:
             user_text = read_user_input(session)
         except KeyboardInterrupt:
-            print("\nExiting.")
-            break
+            raise SystemExit(130)
         if user_text is None:
             continue
         if user_text.lower() in {"exit", "quit"}:
@@ -850,12 +867,8 @@ def main():
             else:
                 needs_confirm, confirm_prompt = requires_confirmation(tool_call)
                 if needs_confirm and not ask_confirmation(confirm_prompt, tool_call):
-                    tool_result = {
-                        "ok": False,
-                        "error": "action canceled by user",
-                        "canceled": True,
-                        "tool": tool_call.get("tool"),
-                    }
+                    print("Tell Baxter what to do differently")
+                    break
                 else:
                     tool_result = run_tool(tool_call["tool"], tool_call["args"])
                     if (
@@ -872,9 +885,12 @@ def main():
                     "content": (
                         "TOOL_RESULT:\n"
                         f"{json.dumps(tool_result)}\n\n"
-                        "Now respond to the user in natural language with what you did. "
-                        "If ok=false, explain the error and ask a single concise follow-up if needed. "
-                        "Only call another tool if the user explicitly requested another action."
+                        "You are still working on the user's current request. "
+                        "If the request is not fully completed yet, call the next required tool now. "
+                        "Do not stop after read/search/list tools when an edit was requested. "
+                        "For git requests, execute git steps yourself with tools instead of asking the user to run commands. "
+                        "Only claim edits when apply_diff/write_file/delete_path succeeded with ok=true. "
+                        "If blocked, explain briefly and ask one concise follow-up."
                     ),
                 }
             )

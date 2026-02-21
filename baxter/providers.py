@@ -279,7 +279,10 @@ def _call_anthropic(messages, model: str, temperature: float) -> str:
 
 def call_provider(provider: str, messages, model: str, temperature: float = 0.2) -> str:
     if provider not in PROVIDERS:
-        raise RuntimeError(f"unknown provider: {provider}")
+        available = ", ".join(PROVIDERS.keys())
+        raise RuntimeError(
+            f"unknown provider '{provider}'. Available providers: {available}"
+        )
     try:
         if provider == "groq":
             return _call_openai_compatible(provider, messages, model, temperature)
@@ -289,4 +292,7 @@ def call_provider(provider: str, messages, model: str, temperature: float = 0.2)
             return _call_anthropic(messages, model, temperature)
         raise RuntimeError(f"unsupported provider: {provider}")
     except Exception as e:
-        raise RuntimeError(f"[{provider}] {e}") from e
+        error_msg = str(e)
+        if "missing. Put it in .env and restart" in error_msg:
+            raise RuntimeError(error_msg) from e
+        raise RuntimeError(f"[{provider}] {error_msg}") from e
