@@ -1,0 +1,28 @@
+# Baxter CLI pip commands
+
+# Install from PyPI
+pip install baxter-cli
+
+# Upgrade to latest
+pip install -U baxter-cli
+
+# Install a specific version
+pip install baxter-cli==0.1.1
+
+# Uninstall
+pip uninstall baxter-cli
+
+# Show installed package info
+pip show baxter-cli
+
+# Build release artifacts (from repo)
+python -m build
+
+# Validate build artifacts
+python -m twine check dist/*
+
+# Upload to TestPyPI
+python -m twine upload --repository testpypi dist/*
+
+# Upload to PyPI
+python -m twine upload dist/*
