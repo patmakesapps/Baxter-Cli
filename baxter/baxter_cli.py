@@ -1,6 +1,8 @@
 import json
 import os
 import sys
+import threading
+import time
 
 from dotenv import load_dotenv
 
@@ -69,9 +71,10 @@ TOOL CALL RULES:
 - If the user asks what is inside a file / to view / open / read / show contents, you MUST call read_file.
 - If the user asks to list a directory, you MUST call list_dir.
 - If the user asks to create a folder/directory, you MUST call make_dir.
-- If the user asks to delete/remove a file or folder, you MUST call delete_path (note: it only deletes empty folders).
+- If the user asks to delete/remove a file or folder, you MUST call delete_path.
 - If the user asks to create a NEW file, you MUST call write_file.
-- If the user asks to change/edit/modify a file, you MUST call read_file first, then write_file.
+- If the user asks to change/edit/modify a file, you MUST call read_file first, then apply_diff.
+- Only use write_file with overwrite=true for full rewrites when apply_diff is not suitable.
 - If the user asks to run a terminal command, you MUST call run_cmd (only allowed commands will work).
 - If the user asks to do git actions (status/add/commit/push/pull/etc), you MUST call git_cmd.
 - If the user asks to search the codebase/files for text or symbols, you MUST call search_code.
@@ -92,10 +95,10 @@ def active_model(session: dict) -> str:
 
 
 def pick_startup_provider() -> str:
-    for name in ("groq", "openai", "anthropic"):
+    for name in ("anthropic", "openai", "groq"):
         if provider_has_key(name):
             return name
-    return "groq"
+    return "anthropic"
 
 
 def try_parse_tool_call(text: str):
@@ -120,6 +123,18 @@ def try_parse_tool_call(text: str):
         except Exception:
             i = start + 1
     return None
+
+
+def _looks_like_broken_tool_call(text: str) -> bool:
+    t = (text or "").strip()
+    if not t:
+        return False
+    # Heuristic: model attempted tool JSON but produced malformed output.
+    if '"tool"' in t and '"args"' in t:
+        return True
+    if t.startswith("{") and ("tool" in t or "args" in t):
+        return True
+    return False
 
 
 def last_n_turns(messages, n_turns=6):
@@ -174,10 +189,48 @@ def print_tool_result(tool_result: dict) -> None:
     if stderr:
         print("  stderr:")
         print(stderr)
+    if tool_result.get("diff_available"):
+        added = int(tool_result.get("added_lines", 0))
+        removed = int(tool_result.get("removed_lines", 0))
+        print(_c(f"  diff: view +/-  (+{added} -{removed})  use /lastdiff", GREEN))
 
 
 def print_separator(label: str) -> None:
     print(_c(f"\n--- {label} ---", GREEN))
+
+
+class _WorkingIndicator:
+    def __init__(self, label: str = "▢ Baxter is working") -> None:
+        self.label = label
+        self._stop = threading.Event()
+        self._thread = None
+
+    def start(self) -> None:
+        if not sys.stdout.isatty():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._thread is None:
+            return
+        self._stop.set()
+        self._thread.join(timeout=1.0)
+        self._thread = None
+        # Clear spinner line before normal output resumes.
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
+
+    def _run(self) -> None:
+        frames = ["   ", ".  ", ".. ", "..."]
+        i = 0
+        while not self._stop.is_set():
+            dots = frames[i % len(frames)]
+            sys.stdout.write(f"\r{_c(self.label, DIM)}{dots}")
+            sys.stdout.flush()
+            i += 1
+            time.sleep(0.2)
 
 
 def _print_providers(session: dict) -> None:
@@ -207,8 +260,32 @@ def _print_help() -> None:
     print(_c("  /models", GREEN))
     print(_c("  /model <model_name>", GREEN))
     print(_c("  /model default", GREEN))
+    print(_c("  /lastdiff  (show last apply_diff unified diff)", GREEN))
     print(_c("  /settings  (alias for /providers)", GREEN))
     print(_c("  /help", GREEN))
+
+
+def _print_colored_diff(diff_text: str) -> None:
+    if not diff_text.strip():
+        print("No diff content.")
+        return
+    for line in diff_text.splitlines():
+        if line.startswith("+++"):
+            print(_c(line, GREEN))
+            continue
+        if line.startswith("---"):
+            print(_c(line, RED))
+            continue
+        if line.startswith("@@"):
+            print(_c(line, YELLOW))
+            continue
+        if line.startswith("+"):
+            print(_c(line, GREEN))
+            continue
+        if line.startswith("-"):
+            print(_c(line, RED))
+            continue
+        print(line)
 
 
 def _render_picker_list(title: str, options: list[str], selected: int, first: bool = False) -> None:
@@ -349,6 +426,14 @@ def handle_ui_command(text: str, session: dict) -> bool:
         _print_providers(session)
         return True
 
+    if t == "/lastdiff":
+        last = session.get("last_diff")
+        if not isinstance(last, str) or not last.strip():
+            print("No diff available yet.")
+            return True
+        _print_colored_diff(last)
+        return True
+
     if t.startswith("/provider "):
         provider = raw.split(maxsplit=1)[1].strip().lower()
         if provider not in PROVIDERS:
@@ -388,6 +473,10 @@ def requires_confirmation(tool_call: dict):
     args = tool_call.get("args", {}) or {}
     if tool == "delete_path":
         return True, f'Confirm delete_path for "{args.get("path", "")}"? [y/N]: '
+    if tool == "apply_diff":
+        return True, f'Confirm apply_diff to "{args.get("path", "")}"? [y/N]: '
+    if tool == "write_file" and bool(args.get("overwrite", False)):
+        return True, f'Confirm overwrite write_file for "{args.get("path", "")}"? [y/N]: '
     if tool == "git_cmd":
         sub = str(args.get("subcommand", "")).strip().lower()
         if sub == "push":
@@ -447,7 +536,11 @@ def main():
     print("Type 'exit' to quit.\n")
     print("Use /help for provider/model commands.\n")
 
-    session = {"provider": pick_startup_provider(), "model_override": None}
+    session = {
+        "provider": pick_startup_provider(),
+        "model_override": None,
+        "last_diff": None,
+    }
     print(f"Active provider: {session['provider']} ({active_model(session)})\n")
 
     while True:
@@ -465,15 +558,21 @@ def main():
 
         messages.append({"role": "user", "content": user_text})
         tool_index = 0
+        malformed_tool_retry_used = False
 
         while True:
             try:
-                reply = call_provider(
-                    provider=session["provider"],
-                    messages=last_n_turns(messages, 6),
-                    model=active_model(session),
-                    temperature=0.2,
-                )
+                indicator = _WorkingIndicator()
+                indicator.start()
+                try:
+                    reply = call_provider(
+                        provider=session["provider"],
+                        messages=last_n_turns(messages, 6),
+                        model=active_model(session),
+                        temperature=0.2,
+                    )
+                finally:
+                    indicator.stop()
             except Exception as e:
                 print(f"▢ {_c('Baxter:', RED)} model error: {e}")
                 break
@@ -482,6 +581,19 @@ def main():
             tool_call = try_parse_tool_call(reply)
 
             if not tool_call:
+                if not malformed_tool_retry_used and _looks_like_broken_tool_call(reply):
+                    malformed_tool_retry_used = True
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Your previous response looked like a tool call but was not valid JSON. "
+                                "Respond again with exactly one valid JSON object on a single line in the "
+                                'form {"tool":"<tool_name>","args":{...}} and no extra text.'
+                            ),
+                        }
+                    )
+                    continue
                 print(f"▢ {_c('Baxter:', GREEN)}", reply)
                 break
 
@@ -503,6 +615,12 @@ def main():
                     }
                 else:
                     tool_result = run_tool(tool_call["tool"], tool_call["args"])
+                    if (
+                        tool_call.get("tool") == "apply_diff"
+                        and tool_result.get("ok")
+                        and isinstance(tool_result.get("diff"), str)
+                    ):
+                        session["last_diff"] = tool_result.get("diff")
 
             print_tool_result(tool_result)
             messages.append(

@@ -17,7 +17,7 @@ PROVIDERS = {
     },
     "anthropic": {
         "env_key": "ANTHROPIC_API_KEY",
-        "default_model": "claude-3-5-haiku-latest",
+        "default_model": "claude-haiku-4-5-20251001",
         "url": "https://api.anthropic.com/v1/messages",
     },
 }
@@ -25,8 +25,6 @@ PROVIDERS = {
 PROVIDER_MODELS = {
     "groq": [
         "llama-3.1-8b-instant",
-        "openai/gpt-oss-120b",
-        "groq/compound",
     ],
     "openai": [
         "gpt-4o-mini",
@@ -34,9 +32,9 @@ PROVIDER_MODELS = {
         "codex-3.5",
     ],
     "anthropic": [
-        "claude-3-5-haiku-latest",
-        "claude-3-5-sonnet-latest",
-        "claude-3-7-sonnet-latest",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001",
     ],
 }
 
@@ -187,10 +185,11 @@ def _call_openai_responses(messages, model: str, temperature: float) -> str:
             continue
         if role not in {"user", "assistant"}:
             role = "user"
+        content_type = "input_text" if role == "user" else "output_text"
         input_items.append(
             {
                 "role": role,
-                "content": [{"type": "input_text", "text": content}],
+                "content": [{"type": content_type, "text": content}],
             }
         )
 

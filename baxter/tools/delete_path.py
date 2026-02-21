@@ -1,9 +1,11 @@
 import os
+import shutil
 from .safe_path import resolve_in_root
 
 
 def run(args: dict) -> dict:
     path = args.get("path")
+    recursive = bool(args.get("recursive", True))
     if not isinstance(path, str) or path.strip() == "":
         return {"ok": False, "error": "missing/invalid path"}
 
@@ -17,7 +19,9 @@ def run(args: dict) -> dict:
             return {"ok": False, "error": f"not found: {path}"}
 
         if os.path.isdir(full_path):
-            # only delete empty dirs (safe default)
+            if recursive:
+                shutil.rmtree(full_path)
+                return {"ok": True, "path": path, "deleted": "dir_recursive"}
             os.rmdir(full_path)
             return {"ok": True, "path": path, "deleted": "dir"}
         else:

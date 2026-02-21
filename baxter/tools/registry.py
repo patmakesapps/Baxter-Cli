@@ -6,6 +6,7 @@ from .delete_path import run as delete_path_run
 from .run_cmd import run as run_cmd_run
 from .git_cmd import run as git_cmd_run
 from .search_code import run as search_code_run
+from .apply_diff import run as apply_diff_run
 
 TOOL_REGISTRY = {
     "write_file": {
@@ -13,8 +14,19 @@ TOOL_REGISTRY = {
         "args": {
             "path": 'string (example: "dummy.py")',
             "content": "string (full file contents)",
+            "overwrite": "bool (optional; set true when updating an existing file)",
         },
         "runner": write_file_run,
+    },
+    "apply_diff": {
+        "description": "Apply a targeted text diff (find/replace) to an existing file.",
+        "args": {
+            "path": 'string (example: "baxter/providers.py")',
+            "find": "string (exact text block to replace)",
+            "replace": "string (replacement text block)",
+            "replace_all": "bool (optional; default false, replaces only one match)",
+        },
+        "runner": apply_diff_run,
     },
     "read_file": {
         "description": "Read a text file from disk and return its contents.",
@@ -38,9 +50,10 @@ TOOL_REGISTRY = {
         "runner": make_dir_run,
     },
     "delete_path": {
-        "description": "Delete a file or an EMPTY directory safely within the root.",
+        "description": "Delete a file or directory safely within the root.",
         "args": {
             "path": 'string (example: "website.json" or "empty_folder")',
+            "recursive": "bool (optional; default true for directory trees)",
         },
         "runner": delete_path_run,
     },

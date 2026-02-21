@@ -2,29 +2,76 @@
 
 ![Baxter CLI Banner](baxter.png)
 
-A lightweight CLI coding assistant with a provider-agnostic model layer and a local tool registry to safely read and write files, run restricted terminal commands, and perform constrained Git operations.
+A local terminal coding assistant with provider switching, tool-calling, and safety rails for file + command operations.
 
 ## Features
 
-- Interactive terminal chat loop
-- Provider-agnostic model integration (`groq`, `openai`, `anthropic`)
-- Session settings via `/settings` (provider/model switching)
-- Structured tool calling with chained tool steps
-- Local tools:
-  - `read_file`
-  - `write_file`
-  - `list_dir`
-  - `make_dir`
-  - `delete_path`
-  - `run_cmd`
-  - `git_cmd`
-  - `search_code`
-- Safety protections:
-  - Relative-path-only file access
-  - Path traversal and root-escape prevention
-  - No shell execution for command tools
-  - Command and Git allowlists
-  - Timeouts on tool execution
+- Interactive chat loop with tool chaining
+- Provider support:
+  - `anthropic` (`/v1/messages`)
+  - `openai` (`/v1/responses`)
+  - `groq` (OpenAI-compatible `chat/completions`)
+- Startup provider preference: `anthropic` -> `openai` -> `groq`
+- Curated model lists per provider (with OpenAI dynamic filtering against `/v1/models`)
+- Working indicator while model calls are in flight (`Baxter is working...`)
+- Built-in malformed tool-call recovery (one automatic retry if JSON tool call is broken)
+
+## Current Model Sets
+
+- `anthropic`
+  - `claude-opus-4-6`
+  - `claude-sonnet-4-6`
+  - `claude-haiku-4-5-20251001` (default)
+- `openai`
+  - `gpt-4o-mini` (default)
+  - `gpt-5-mini`
+  - `codex-3.5`
+- `groq`
+  - `llama-3.1-8b-instant` (default)
+
+Notes:
+- OpenAI model IDs are fetched from `/v1/models` and intersected with the allowlist above.
+- You can override the OpenAI allowlist with `OPENAI_MODELS_ALLOWLIST` (comma-separated IDs).
+
+## Tooling
+
+Tools available:
+- `read_file`
+- `write_file`
+- `apply_diff`
+- `list_dir`
+- `make_dir`
+- `delete_path`
+- `run_cmd`
+- `git_cmd`
+- `search_code`
+
+Key behaviors:
+- File paths are restricted to the repo root (no absolute paths, no `..` escape).
+- `delete_path` supports recursive directory deletion (default `recursive=true`).
+- `write_file` refuses to overwrite existing files unless `overwrite=true`.
+- `apply_diff` supports targeted edits using exact `find`/`replace` with optional `replace_all=true`.
+- `apply_diff` returns a unified diff summary (`+/-`) and stores the full last diff for terminal viewing.
+
+## Confirmations
+
+Baxter asks `y/N` confirmation before:
+- `delete_path`
+- `apply_diff`
+- `write_file` when `overwrite=true`
+- `git push`
+- `git rm`
+
+## CLI Commands
+
+- `/` opens interactive provider/model picker
+- `/providers` (alias: `/settings`)
+- `/provider <groq|openai|anthropic>`
+- `/models`
+- `/model <model_name>`
+- `/model default`
+- `/lastdiff` (expand the last `apply_diff` unified diff)
+- `/help`
 
 ## Project Layout
 
@@ -38,10 +85,12 @@ A lightweight CLI coding assistant with a provider-agnostic model layer and a lo
    ├─ baxter_cli.py
    ├─ providers.py
    └─ tools/
+      ├─ __init__.py
       ├─ registry.py
       ├─ safe_path.py
       ├─ read_file.py
       ├─ write_file.py
+      ├─ apply_diff.py
       ├─ list_dir.py
       ├─ make_dir.py
       ├─ delete_path.py
@@ -53,11 +102,14 @@ A lightweight CLI coding assistant with a provider-agnostic model layer and a lo
 ## Requirements
 
 - Python 3.10+
-- At least one provider API key (`GROQ_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
+- At least one API key:
+  - `ANTHROPIC_API_KEY`
+  - `OPENAI_API_KEY`
+  - `GROQ_API_KEY`
 
 ## Setup
 
-1. Create and activate a virtual environment (recommended).
+1. Create and activate a virtual environment.
 
 Windows (cmd):
 
@@ -80,23 +132,25 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-2. Install the package in editable mode:
+2. Install editable:
 
 ```bash
 pip install -e .
 ```
 
-3. Configure environment variables by creating `.env` from `.env.example`, then set:
+3. Create `.env` from `.env.example` and set keys:
 
 ```env
-GROQ_API_KEY=your_real_key_here
-OPENAI_API_KEY=your_real_key_here
-ANTHROPIC_API_KEY=your_real_key_here
+GROQ_API_KEY=...
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+# optional:
+# OPENAI_MODELS_ALLOWLIST=gpt-4o-mini,gpt-5-mini,codex-3.5
 ```
 
-## Run
+The CLI uses `load_dotenv(override=True)`, so `.env` values override stale shell-level env vars.
 
-Use either entrypoint:
+## Run
 
 ```bash
 baxter
@@ -108,29 +162,9 @@ or:
 python -m baxter.baxter_cli
 ```
 
-On startup, the CLI prints API key availability for each provider and enters interactive mode.
-
-Settings commands:
-
-- `/settings`
-- `/settings provider <groq|openai|anthropic>`
-- `/settings model <model_name>`
-- `/settings reset-model`
-
-## Tool Call Format
-
-When the model chooses a tool, it must return exactly one JSON object:
-
-```json
-{"tool":"read_file","args":{"path":"README.md"}}
-```
-
-Tool results are fed back into the conversation. Chaining continues until the model returns normal text.
-
 ## Command Safety Model
 
 `run_cmd` allowlist:
-
 - `python`
 - `python3`
 - `pip`
@@ -138,7 +172,6 @@ Tool results are fed back into the conversation. Chaining continues until the mo
 - `git`
 
 `git_cmd` subcommand allowlist:
-
 - `status`
 - `log`
 - `diff`
@@ -159,19 +192,18 @@ Tool results are fed back into the conversation. Chaining continues until the mo
 - `stash`
 
 Additional protections:
-
-- Disallows shell usage and path escapes
-- Rejects selected risky Git flags (`--git-dir`, `--work-tree`, `-C`, etc.)
-- Enforces per-tool timeout bounds
+- No shell execution for command tools
+- Path traversal/root escape blocked
+- Selected risky git flags blocked (`--git-dir`, `--work-tree`, `-C`, etc.)
+- Per-tool timeout bounds
 
 ## Troubleshooting
 
-- `<PROVIDER_API_KEY> is missing. Put it in .env and restart.`
-  - Ensure `.env` exists in repo root and includes at least one of:
-    - `GROQ_API_KEY=...`
-    - `OPENAI_API_KEY=...`
-    - `ANTHROPIC_API_KEY=...`
-- `git not found on PATH`
-  - Install Git from `https://git-scm.com/` and restart the terminal
-- Provider HTTP errors
-  - Check API key, connectivity, and model name
+- Missing key error:
+  - Verify `.env` has the expected API key and restart Baxter.
+- OpenAI tool-call/JSON issues:
+  - Baxter now does one automatic repair retry for malformed tool-call JSON.
+- OpenAI model list too large:
+  - Set `OPENAI_MODELS_ALLOWLIST` explicitly.
+- `git not found on PATH`:
+  - Install Git and restart terminal.
