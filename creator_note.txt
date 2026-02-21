@@ -1,12 +1,30 @@
 Thank you for choosing to use or work on Baxter.
 
-Different models may yield different behaviors. 
+========================================
+MODEL CAPABILITIES & RECOMMENDATIONS
+========================================
 
-OpenAI is a bit slower but throurough and cautios.
+🚀 GROQ (Llama 3.1 8B)
+─────────────────────
+Lightning-fast inference with minimal latency.
+Best for: Quick iterations, lightweight tasks.
+Limitations: Less capable at complex reasoning and tool usage.
+Note: Struggles with multi-step tool orchestration and intricate workflows.
 
-Anthropic is creative and very smart.
+🔷 OPENAI (GPT Models)
+──────────────────────
+Thorough and cautious approach to task execution.
+Best for: Production environments requiring reliability and accuracy.
+Strengths: Robust tool handling, consistent outputs, well-calibrated confidence.
+Approach: Conservative but dependable—excels at complex tool chains.
 
-Groq is lightning fast but not nearly as capable although it depends on which model you use.
-At this time we only have default support for Llama 3.1 8b but you can modify the code to support other models.
+🧠 ANTHROPIC (Claude)
+──────────────────────
+Smart, capable, and excellent for heavy workflows.
+Best for: Complex reasoning, multi-tool orchestration, high-volume operations.
+Strengths: Nuanced understanding, creative problem-solving, exceptional tool usage.
+Approach: Sophisticated handling of intricate tasks and workflows.
 
-Contributors are welcome. Anyone who is serious about building Baxter as part of a team can reach out to me directly to talk further.
+========================================
+
+Contributors are welcome. Anyone who is serious about building Baxter as part of a team can reach out directly to discuss collaboration.
