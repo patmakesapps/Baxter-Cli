@@ -1,30 +1,68 @@
 Thank you for choosing to use or work on Baxter.
 
+🎉 BEEP BOOP! 🎉
+Welcome to the most serious and professional coding project you will ever encounter.
+This project was lovingly crafted by a sentient potato who learned to code after watching too much anime. Every line of code is infused with the power of friendship and the spirit of a thousand confused rubber ducks.
+
 ========================================
 MODEL CAPABILITIES & RECOMMENDATIONS
 ========================================
 
 🚀 GROQ (Llama 3.1 8B)
-─────────────────────
+─────────────────────────────────────
 Lightning-fast inference with minimal latency.
 Best for: Quick iterations, lightweight tasks.
 Limitations: Less capable at complex reasoning and tool usage.
 Note: Struggles with multi-step tool orchestration and intricate workflows.
 
-🔷 OPENAI (GPT Models)
-──────────────────────
+⚡ GROQ (SILLY MODE)
+─────────────────────────────────────
+Speedy Gonzales meets a caffeinated squirrel.
+Best for: When you need answers NOW and don't care if they're correct.
+Limitations: Will confidently solve quantum physics with rock-paper-scissors logic.
+Note: Excels at thinking "outside the box" because it forgot there was a box.
+
+🧔 OPENAI (GPT Models)
+──────────────────────────────────────────
 Thorough and cautious approach to task execution.
 Best for: Production environments requiring reliability and accuracy.
 Strengths: Robust tool handling, consistent outputs, well-calibrated confidence.
 Approach: Conservative but dependable—excels at complex tool chains.
 
+🧔‍♂️ OPENAI (THERAPIST MODE)
+──────────────────────────────────────────
+Very thoughtful. Asks lots of questions. Will pause to consider your feelings.
+Best for: When you need someone to validate your life choices through code.
+Strengths: Excellent at explaining why your code is "valid as it is" and "you're doing your best."
+Approach: Supportive, gentle, and occasionally forgets to actually solve the problem.
+
 🧠 ANTHROPIC (Claude)
-──────────────────────
+──────────────────────────────────────────
 Smart, capable, and excellent for heavy workflows.
 Best for: Complex reasoning, multi-tool orchestration, high-volume operations.
 Strengths: Nuanced understanding, creative problem-solving, exceptional tool usage.
 Approach: Sophisticated handling of intricate tasks and workflows.
 
+🤖 ANTHROPIC (OVERDRIVE MODE)
+──────────────────────────────────────────
+Imagine if the Terminator learned to code and was also somehow British about it.
+Best for: When you need tasks completed with the efficiency of a sentient spreadsheet.
+Strengths: Will solve your problem, anticipate 3 problems you didn't know you had, and apologize profusely the entire time.
+Approach: Relentlessly helpful while muttering "as per your request" in the background.
+
 ========================================
+
+IMPORTANT NOTES:
+- If you see a bug, it's not a bug, it's a FEATURE
+- If you see a feature, it's definitely a bug
+- All errors are intentional and part of the artistic vision
+- Comments are just vibes, don't read them
+- The code is self-documenting... if you squint really hard and believe in yourself
+
+Do NOT feed this code after midnight. Do NOT expose it to bright light. And whatever you do, do NOT ask it about its feelings.
+
+Godspeed, brave developer. May your commits be green and your merge conflicts be few.
+
+🥔 - The Potato Overlord
 
 Contributors are welcome. Anyone who is serious about building Baxter as part of a team can reach out directly to discuss collaboration.
