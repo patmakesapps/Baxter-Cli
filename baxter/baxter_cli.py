@@ -110,43 +110,62 @@ def _write_env_file(path: str, values: dict[str, str]) -> None:
         f.write("\n".join(lines) + ("\n" if lines else ""))
 
 
-def maybe_prompt_api_key_setup() -> None:
-    if provider_has_key("anthropic") or provider_has_key("openai") or provider_has_key("groq"):
+def maybe_prompt_api_key_setup(force: bool = False) -> None:
+    if (not force) and (
+        provider_has_key("anthropic") or provider_has_key("openai") or provider_has_key("groq")
+    ):
         return
     env_path = _user_env_path()
     if not env_path:
         return
 
-    print(
-        tui.c(
-            "No provider API keys found. Configure now for one-time setup in ~/.baxter/.env.",
-            tui.YELLOW,
+    if force:
+        print(tui.c("API key setup (~/.baxter/.env)", tui.GREEN))
+        print(
+            tui.c(
+                "Press Enter to keep current value, enter '-' to clear a key.",
+                tui.DIM,
+            )
         )
-    )
-    answer = input("Set up API keys now? [Y/n]: ").strip().lower()
-    if answer in {"n", "no"}:
-        return
+    else:
+        print(
+            tui.c(
+                "No provider API keys found. Configure now for one-time setup in ~/.baxter/.env.",
+                tui.YELLOW,
+            )
+        )
+        answer = input("Set up API keys now? [Y/n]: ").strip().lower()
+        if answer in {"n", "no"}:
+            return
 
     existing = _parse_env_file(env_path)
-    wrote_any = False
+    changed = False
     for provider in ("openai", "anthropic", "groq"):
         env_key = str(PROVIDERS[provider]["env_key"])
         current = os.getenv(env_key, "").strip()
-        prompt = f"Enter {env_key}"
-        if current:
-            prompt += " (press Enter to keep current)"
-        prompt += ", or leave blank to skip: "
+        state = "set" if current else "empty"
+        prompt = f"Enter {env_key} [{state}]"
+        prompt += " (Enter=keep, -=clear): "
         raw = input(prompt).strip()
-        if raw:
+        if raw == "-":
+            existing.pop(env_key, None)
+            os.environ.pop(env_key, None)
+            changed = True
+        elif raw:
             existing[env_key] = raw
             os.environ[env_key] = raw
-            wrote_any = True
+            changed = True
         elif current:
             existing[env_key] = current
-            wrote_any = True
+        elif env_key in existing:
+            # Keep existing file value if present, even if not currently loaded in env.
+            pass
 
-    if not wrote_any:
-        print(tui.c("No keys were entered. You can configure later in ~/.baxter/.env.", tui.YELLOW))
+    if not changed and force:
+        print(tui.c("No key changes were made.", tui.YELLOW))
+        return
+    if not changed and not force:
+        print(tui.c("No keys were entered. You can configure later with /keys.", tui.YELLOW))
         return
 
     try:
@@ -372,7 +391,7 @@ def should_enforce_readonly_guard(session: dict) -> bool:
 
 
 def main():
-    maybe_prompt_api_key_setup()
+    maybe_prompt_api_key_setup(force=False)
     system_prompt = build_system_prompt()
     messages = [{"role": "system", "content": system_prompt}]
 
@@ -383,7 +402,7 @@ def main():
         f"groq={provider_has_key('groq')} openai={provider_has_key('openai')} anthropic={provider_has_key('anthropic')}",
     )
     print("Type 'exit' to quit.\n")
-    print("Use /help for provider/model commands.\n")
+    print("Use /models and /apikeys.\n")
 
     session = {
         "provider": pick_startup_provider(),
@@ -403,6 +422,16 @@ def main():
             continue
         if user_text.lower() in {"exit", "quit"}:
             break
+        if user_text.strip().lower() == "/apikeys":
+            maybe_prompt_api_key_setup(force=True)
+            print(
+                tui.c(
+                    "Key status:",
+                    tui.GREEN,
+                ),
+                f"groq={provider_has_key('groq')} openai={provider_has_key('openai')} anthropic={provider_has_key('anthropic')}",
+            )
+            continue
         if tui.handle_ui_command(user_text, session):
             continue
 

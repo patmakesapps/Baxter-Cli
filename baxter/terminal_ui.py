@@ -210,14 +210,8 @@ def print_models(session: dict) -> None:
 
 def print_help() -> None:
     print(c("Commands:", GREEN))
-    print(c("  /providers", GREEN))
-    print(c("  /provider <groq|openai|anthropic>", GREEN))
-    print(c("  /models", GREEN))
-    print(c("  /model <model_name>", GREEN))
-    print(c("  v          (alias for /lastdiff)", GREEN))
-    print(c("  /lastdiff  (show last apply_diff unified diff)", GREEN))
-    print(c("  /settings  (alias for /providers)", GREEN))
-    print(c("  /help", GREEN))
+    print(c("  /models    (open provider/model picker)", GREEN))
+    print(c("  /apikeys   (add/update/clear API keys)", GREEN))
 
 
 def print_colored_diff(diff_text: str) -> None:
@@ -351,11 +345,6 @@ def read_user_input(session: dict) -> str | None:
                 sys.stdout.write("\b \b")
                 sys.stdout.flush()
             continue
-        if ch == "/" and buf == "":
-            sys.stdout.write("/\n")
-            sys.stdout.flush()
-            slash_picker(session)
-            return None
         if ch and ch >= " ":
             buf += ch
             sys.stdout.write(ch)
@@ -366,51 +355,12 @@ def handle_ui_command(text: str, session: dict) -> bool:
     raw = text.strip()
     t = raw.lower()
 
-    if raw and set(raw) == {"/"}:
+    if t == "/models":
         slash_picker(session)
         return True
 
-    if t in {"/help", "help", "/h", "?"}:
-        print_help()
-        return True
-
-    if t in {"/providers", "/settings"}:
-        print_providers(session)
-        return True
-
-    if t in {"/lastdiff", "v", "view", "view +/-"}:
-        last = session.get("last_diff")
-        if not isinstance(last, str) or not last.strip():
-            print("No diff available yet.")
-            return True
-        print_colored_diff(last)
-        return True
-
-    if t.startswith("/provider "):
-        provider = raw.split(maxsplit=1)[1].strip().lower()
-        if provider not in PROVIDERS:
-            print(f"Unknown provider: {provider}")
-            return True
-        if not provider_has_key(provider):
-            print(f"Cannot switch provider: missing {PROVIDERS[provider]['env_key']}")
-            return True
-        session["provider"] = provider
-        session["model_override"] = None
-        print(c(f"Provider set to {provider}. Model reset to {active_model(session)}", GREEN))
-        return True
-
-    if t == "/models":
-        print_models(session)
-        return True
-
-    if t.startswith("/model "):
-        value = raw.split(maxsplit=1)[1].strip()
-        session["model_override"] = value
-        print(c(f"Model set to: {active_model(session)}", GREEN))
-        return True
-
     if t.startswith("/"):
-        print("Unknown command. Use /help.")
+        print("Unknown command. Use /models or /apikeys.")
         return True
 
     return False
