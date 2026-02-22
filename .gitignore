@@ -91,6 +91,18 @@ Desktop.ini
 *.log
 
 # =========================
+# JavaScript / Node tool output
+# =========================
+
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+react-project/
+
+# =========================
 # Local database files
 # =========================
 

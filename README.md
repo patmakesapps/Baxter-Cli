@@ -4,6 +4,9 @@
 
 A local terminal coding assistant with provider switching, tool-calling, and safety rails for file + command operations.
 
+NOTE: a new version of the pip install is currently in development which will allow Baxter to create a react app and more cmd actions. 
+      The current repo is not alighned with the existimg pip install. We will update pip when the new repo changes are stable enough for prod.
+
 ## Features
 
 - Interactive chat loop with tool chaining
@@ -242,6 +245,21 @@ python -m baxter.baxter_cli
 - `pip`
 - `pip3`
 - `git`
+- `node`
+- `npm`
+- `npx`
+- `python.exe`
+- `pip.exe`
+- `git.exe`
+- `node.exe`
+- `npm.cmd`
+- `npx.cmd`
+
+`run_cmd` process behavior:
+- Use `detach=true` to start long-running commands (example: `["npm","run","dev"]`) in the background.
+- Detached runs return `pid` and a background status message in the terminal UI.
+- To stop a detached process, call `run_cmd` with `stop_pid` (only PIDs started by this Baxter session are stoppable).
+- On Windows, `run_cmd` automatically retries common shims (example: `npm` -> `npm.cmd`) if the bare binary is not found.
 
 `git_cmd` subcommand allowlist:
 - `status`

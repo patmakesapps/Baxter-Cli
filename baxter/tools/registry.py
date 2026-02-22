@@ -58,11 +58,13 @@ TOOL_REGISTRY = {
         "runner": delete_path_run,
     },
     "run_cmd": {
-        "description": "Run an allowed terminal command in the project root (no shell).",
+        "description": "Run an allowed terminal command in the project root (no shell), or stop a tracked detached process.",
         "args": {
-            "cmd": 'list[string] (example: ["python","--version"] or ["pip","-V"])',
+            "cmd": 'list[string] (required unless stop_pid is set; example: ["python","--version"] or ["npm","run","dev"])',
             "cwd": 'string (optional, relative path; example: "." or "tools")',
-            "timeout_sec": "int (optional, 1-300; default 60)",
+            "timeout_sec": "int (optional, 1-1800; default adaptive 60->1800)",
+            "detach": "bool (optional; default false; start command in background and return pid)",
+            "stop_pid": "int (optional; stop a detached pid started by this Baxter session)",
         },
         "runner": run_cmd_run,
     },

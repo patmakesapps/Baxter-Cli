@@ -87,7 +87,10 @@ def print_assistant_reply(reply: str) -> None:
     cleaned = strip_markdown(reply or "")
     lines = cleaned.splitlines() or [""]
 
-    print(label + (wrap_line(lines[0], body_width)[0] if lines[0] else ""))
+    first_wrapped = wrap_line(lines[0], body_width) if lines[0] else [""]
+    print(label + first_wrapped[0])
+    for chunk in first_wrapped[1:]:
+        print(chunk)
     for line in lines[1:]:
         wrapped = wrap_line(line, width)
         for chunk in wrapped:
@@ -108,6 +111,88 @@ def result_status(tool_result: dict) -> str:
     return "ok"
 
 
+def _cmd_words(cmd_parts) -> list[str]:
+    if not isinstance(cmd_parts, list):
+        return []
+    words: list[str] = []
+    for part in cmd_parts:
+        if isinstance(part, str):
+            token = part.strip().lower()
+            if token:
+                words.append(token)
+    return words
+
+
+def classify_run_cmd_step(cmd_parts) -> str | None:
+    words = _cmd_words(cmd_parts)
+    if not words:
+        return None
+    bin_name = words[0]
+    args = words[1:]
+    pkg_bins = {"npm", "npm.cmd", "npx", "npx.cmd", "pnpm", "yarn"}
+    if bin_name not in pkg_bins:
+        return None
+
+    joined = " ".join(args)
+    if "create-react-app" in joined or "create vite" in joined or "create-vite" in joined:
+        return "scaffolding app"
+    if any(a in {"install", "i", "ci", "add"} for a in args):
+        return "installing dependencies"
+    if "build" in args:
+        return "building project"
+    if "dev" in args or "start" in args:
+        return "starting dev server"
+    return "running package manager task"
+
+
+def is_noisy_install_command(cmd_parts) -> bool:
+    words = _cmd_words(cmd_parts)
+    if not words:
+        return False
+    bin_name = words[0]
+    args = words[1:]
+    if bin_name not in {"npm", "npm.cmd", "npx", "npx.cmd", "pnpm", "yarn"}:
+        return False
+    if "create-react-app" in " ".join(args):
+        return True
+    noisy_tokens = {"install", "i", "ci", "create", "add"}
+    return any(a in noisy_tokens for a in args)
+
+
+def summarize_run_cmd_output(tool_result: dict) -> str | None:
+    lines: list[str] = []
+    for key in ("stdout", "stderr"):
+        raw = str(tool_result.get(key, "")).strip()
+        if raw:
+            lines.extend(raw.splitlines())
+    if not lines:
+        return None
+
+    patterns = (
+        r"created .+ at ",
+        r"added \d+ packages",
+        r"up to date",
+        r"audited \d+ packages",
+        r"done in .+",
+        r"found \d+ vulnerabilities?",
+    )
+    summary: list[str] = []
+    for line in lines:
+        compact = line.strip()
+        if not compact:
+            continue
+        low = compact.lower()
+        if any(re.search(p, low) for p in patterns):
+            summary.append(compact)
+    if not summary:
+        return None
+    deduped: list[str] = []
+    for item in summary:
+        if item not in deduped:
+            deduped.append(item)
+    return "; ".join(deduped[:3])
+
+
 def print_tool_result(tool_result: dict, clip_fn) -> None:
     status = result_status(tool_result)
     color = GREEN if status == "ok" else (YELLOW if status == "failed" else RED)
@@ -116,15 +201,52 @@ def print_tool_result(tool_result: dict, clip_fn) -> None:
     cmd_parts = tool_result.get("cmd")
     if isinstance(cmd_parts, list) and cmd_parts:
         print(c("  command:", DIM) + f" {' '.join(cmd_parts)}")
+        stage = classify_run_cmd_step(cmd_parts)
+        if stage:
+            print(c(f"  step: {stage}", DIM))
     if "cwd" in tool_result:
         print(f"  cwd: {tool_result['cwd']}")
     if "exit_code" in tool_result:
         print(f"  exit_code: {tool_result['exit_code']}")
+    if "success" in tool_result:
+        print(f"  success: {bool(tool_result.get('success'))}")
+    if tool_result.get("timed_out"):
+        tsec = tool_result.get("timeout_sec")
+        if isinstance(tsec, int):
+            print(c(f"  result: timed out after {tsec}s", RED))
+        else:
+            print(c("  result: timed out", RED))
+    if tool_result.get("detached"):
+        pid = tool_result.get("pid")
+        if isinstance(pid, int):
+            print(c(f"  process: running in background (pid {pid})", GREEN))
+        else:
+            print(c("  process: running in background", GREEN))
+    elif "pid" in tool_result:
+        print(f"  pid: {tool_result['pid']}")
+    if "stopped" in tool_result:
+        stopped = bool(tool_result.get("stopped"))
+        status_text = "stopped" if stopped else "still running"
+        color = GREEN if stopped else YELLOW
+        print(c(f"  process: {status_text}", color))
+    if tool_result.get("message"):
+        print(f"  message: {tool_result['message']}")
+    if status == "failed":
+        print(c("  result: command failed (non-zero exit code)", YELLOW))
     if tool_result.get("error"):
         print(f"  error: {tool_result['error']}")
 
-    stdout = clip_fn(str(tool_result.get("stdout", "")).strip())
-    stderr = clip_fn(str(tool_result.get("stderr", "")).strip())
+    show_compact_success = status == "ok" and is_noisy_install_command(cmd_parts)
+    if show_compact_success:
+        summary = summarize_run_cmd_output(tool_result)
+        if summary:
+            print(c(f"  summary: {summary}", DIM))
+        print(c("  output: suppressed noisy install logs", DIM))
+        stdout = ""
+        stderr = ""
+    else:
+        stdout = clip_fn(str(tool_result.get("stdout", "")).strip())
+        stderr = clip_fn(str(tool_result.get("stderr", "")).strip())
     width = terminal_width()
     if stdout:
         print("  stdout:")
@@ -164,6 +286,7 @@ class WorkingIndicator:
 
     def start(self) -> None:
         if not sys.stdout.isatty():
+            print(c(f"{self.label}...", DIM))
             return
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -187,6 +310,80 @@ class WorkingIndicator:
             sys.stdout.flush()
             i += 1
             time.sleep(0.2)
+
+
+class CommandIndicator:
+    def __init__(
+        self,
+        cmd_parts,
+        timeout_sec: int | None = None,
+        label: str = "▢ Baxter is working",
+        active_step: str | None = None,
+        inline: bool = True,
+    ) -> None:
+        self.cmd_parts = cmd_parts if isinstance(cmd_parts, list) else []
+        self.timeout_sec = timeout_sec if isinstance(timeout_sec, int) and timeout_sec > 0 else None
+        self.label = label
+        self.active_step = active_step.strip() if isinstance(active_step, str) else None
+        self.inline = bool(inline)
+        self._stop = threading.Event()
+        self._thread = None
+        self._start_ts = 0.0
+
+    def _cmd_text(self) -> str:
+        raw = " ".join(str(x) for x in self.cmd_parts if isinstance(x, str)).strip()
+        if not raw:
+            raw = "(command)"
+        if len(raw) > 70:
+            return raw[:67] + "..."
+        return raw
+
+    def start(self) -> None:
+        self._start_ts = time.time()
+        if not sys.stdout.isatty():
+            timeout_text = f", timeout={self.timeout_sec}s" if self.timeout_sec else ""
+            print(c(f"{self.label}: {self._cmd_text()} (in progress{timeout_text})", DIM))
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._thread is None:
+            return
+        self._stop.set()
+        self._thread.join(timeout=1.0)
+        self._thread = None
+        if self.inline and sys.stdout.isatty():
+            sys.stdout.write("\r\033[K")
+            sys.stdout.flush()
+
+    def _run(self) -> None:
+        frames = ["|", "/", "-", "\\"]
+        i = 0
+        status_text = self.active_step or self._cmd_text()
+        last_logged_elapsed = -1
+        while not self._stop.is_set():
+            elapsed = int(max(0, time.time() - self._start_ts))
+            if self.timeout_sec:
+                if elapsed <= self.timeout_sec:
+                    tail = f" [{elapsed}s/{self.timeout_sec}s]"
+                else:
+                    over = elapsed - self.timeout_sec
+                    tail = f" [{elapsed}s/{self.timeout_sec}s +{over}s over]"
+            else:
+                tail = f" [{elapsed}s]"
+            frame = frames[i % len(frames)]
+            if self.inline and sys.stdout.isatty():
+                sys.stdout.write(f"\r{c(self.label, DIM)} {frame} {status_text}{tail}")
+                sys.stdout.flush()
+            else:
+                # Keep foreground heartbeat sparse so live stdout/stderr stays readable.
+                if elapsed == 0 or elapsed - last_logged_elapsed >= 15:
+                    print(c(f"  {self.label} {frame} {status_text}{tail}", DIM))
+                    last_logged_elapsed = elapsed
+            i += 1
+            time.sleep(1.0 if not self.inline else 0.12)
 
 
 def print_providers(session: dict) -> None:
@@ -328,26 +525,90 @@ def read_user_input(session: dict) -> str | None:
     sys.stdout.write("▣ You:")
     sys.stdout.flush()
     buf = ""
+    source_flags: list[bool] = []
+    visible_chars: list[str] = []
+    pasted_char_count = 0
+    last_paste_ts = 0.0
+    paste_notice_shown = False
+
+    def _is_probable_paste_chunk(chunk: list[str]) -> bool:
+        if len(chunk) < 8:
+            return False
+        for cch in chunk:
+            if cch in ("\x00", "\xe0", "\x03", "\b"):
+                return False
+            if cch not in ("\r", "\n", "\t") and cch < " ":
+                return False
+        return True
+
     while True:
-        ch = msvcrt.getwch()
-        if ch in ("\r", "\n"):
+        first = msvcrt.getwch()
+        chunk = [first]
+        while msvcrt.kbhit():
+            chunk.append(msvcrt.getwch())
+
+        is_paste_chunk = _is_probable_paste_chunk(chunk)
+        if is_paste_chunk:
+            last_paste_ts = time.time()
+
+        for idx, ch in enumerate(chunk):
+            if ch in ("\r", "\n"):
+                # If input is still queued (or we just detected a paste burst),
+                # treat Enter as a literal newline instead of submitting.
+                is_last_in_chunk = idx == (len(chunk) - 1)
+                if msvcrt.kbhit():
+                    buf += "\n"
+                    source_flags.append(True)
+                    pasted_char_count += 1
+                    continue
+                if is_paste_chunk and is_last_in_chunk:
+                    # Paste commonly ends with a trailing newline. Keep input
+                    # pending and let user press Enter explicitly to submit.
+                    continue
+                if (time.time() - last_paste_ts) <= 0.06:
+                    buf += "\n"
+                    source_flags.append(True)
+                    pasted_char_count += 1
+                    continue
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                if pasted_char_count > 0 and (not paste_notice_shown):
+                    print(c(f"[{pasted_char_count} chars pasted]", GREEN))
+                return buf.strip()
+            if ch in ("\x00", "\xe0"):
+                _ = msvcrt.getwch()
+                continue
+            if ch == "\x03":
+                raise SystemExit(130)
+            if ch == "\b":
+                if buf and source_flags:
+                    was_pasted = source_flags.pop()
+                    removed = buf[-1]
+                    buf = buf[:-1]
+                    if (not was_pasted) and removed != "\n":
+                        if visible_chars:
+                            visible_chars.pop()
+                        sys.stdout.write("\b \b")
+                        sys.stdout.flush()
+                continue
+            if ch and ch >= " ":
+                buf += ch
+                if is_paste_chunk:
+                    source_flags.append(True)
+                    pasted_char_count += 1
+                else:
+                    source_flags.append(False)
+                    visible_chars.append(ch)
+                    sys.stdout.write(ch)
+                    sys.stdout.flush()
+        if is_paste_chunk and pasted_char_count > 0:
+            paste_notice_shown = True
             sys.stdout.write("\n")
             sys.stdout.flush()
-            return buf.strip()
-        if ch in ("\x00", "\xe0"):
-            _ = msvcrt.getwch()
-            continue
-        if ch == "\x03":
-            raise SystemExit(130)
-        if ch == "\b":
-            if buf:
-                buf = buf[:-1]
-                sys.stdout.write("\b \b")
-                sys.stdout.flush()
-            continue
-        if ch and ch >= " ":
-            buf += ch
-            sys.stdout.write(ch)
+            print(c(f"[{pasted_char_count} chars pasted]", GREEN))
+            sys.stdout.write("▣ You:")
+            if visible_chars:
+                sys.stdout.write("".join(visible_chars))
             sys.stdout.flush()
 
 
@@ -369,6 +630,21 @@ def handle_ui_command(text: str, session: dict) -> bool:
 def requires_confirmation(tool_call: dict):
     tool = tool_call.get("tool")
     args = tool_call.get("args", {}) or {}
+    if tool == "run_cmd":
+        cmd = args.get("cmd")
+        if isinstance(cmd, list) and cmd and all(isinstance(x, str) for x in cmd):
+            parts = [p.strip().lower() for p in cmd if isinstance(p, str)]
+            if parts:
+                bin_name = parts[0]
+                starts_process = bool(args.get("detach", False)) or (
+                    bin_name in {"npm", "npm.cmd", "npx", "npx.cmd", "yarn", "pnpm"}
+                    and (("run" in parts and "dev" in parts) or ("start" in parts) or ("dev" in parts))
+                )
+                if starts_process:
+                    cmd_text = " ".join(cmd).strip()
+                    if len(cmd_text) > 80:
+                        cmd_text = cmd_text[:77] + "..."
+                    return True, f'Start process "{cmd_text}" now? [y/N]: '
     if tool == "delete_path":
         return True, f'Confirm delete_path for "{args.get("path", "")}"? [y/N]: '
     if tool == "apply_diff":
@@ -526,44 +802,6 @@ def ask_confirmation(prompt: str, tool_call: dict | None = None) -> bool:
             )
         )
     )
-
-    if can_preview and IS_WINDOWS and sys.stdin.isatty():
-        import msvcrt
-
-        preview_visible = False
-        preview_line_count = 0
-        sys.stdout.write(prompt)
-        sys.stdout.flush()
-        while True:
-            ch = msvcrt.getwch().lower()
-            if ch == "\x03":
-                raise SystemExit(130)
-            if ch in {"y"}:
-                if preview_visible and preview_line_count:
-                    clear_rendered_lines(preview_line_count)
-                sys.stdout.write("y\n")
-                sys.stdout.flush()
-                return True
-            if ch in {"n", "\r", "\n", "\x1b"}:
-                if preview_visible and preview_line_count:
-                    clear_rendered_lines(preview_line_count)
-                sys.stdout.write("n\n")
-                sys.stdout.flush()
-                return False
-            if ch == "p":
-                if not preview_visible:
-                    sys.stdout.write("\n")
-                    sys.stdout.flush()
-                    preview_text = preview_text_for_tool(tool_call)
-                    preview_line_count = print_preview_with_count(preview_text)
-                    preview_visible = True
-                else:
-                    clear_rendered_lines(preview_line_count)
-                    preview_visible = False
-                    preview_line_count = 0
-                sys.stdout.write(prompt)
-                sys.stdout.flush()
-                continue
 
     while True:
         try:

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import signal
 import sys
 
 from dotenv import load_dotenv
@@ -12,6 +13,10 @@ from baxter.providers import (
     provider_has_key,
 )
 from baxter.tools.registry import TOOL_NAMES, render_registry_for_prompt, run_tool
+from baxter.tools.run_cmd import (
+    stop_active_foreground_process,
+    stop_all_tracked_processes,
+)
 
 
 def load_baxter_env() -> None:
@@ -105,14 +110,20 @@ def _write_env_file(path: str, values: dict[str, str]) -> None:
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    lines = [f"{k}={v}" for k, v in values.items() if isinstance(k, str) and isinstance(v, str)]
+    lines = [
+        f"{k}={v}"
+        for k, v in values.items()
+        if isinstance(k, str) and isinstance(v, str)
+    ]
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + ("\n" if lines else ""))
 
 
 def maybe_prompt_api_key_setup(force: bool = False) -> None:
     if (not force) and (
-        provider_has_key("anthropic") or provider_has_key("openai") or provider_has_key("groq")
+        provider_has_key("anthropic")
+        or provider_has_key("openai")
+        or provider_has_key("groq")
     ):
         return
     env_path = _user_env_path()
@@ -165,7 +176,11 @@ def maybe_prompt_api_key_setup(force: bool = False) -> None:
         print(tui.c("No key changes were made.", tui.YELLOW))
         return
     if not changed and not force:
-        print(tui.c("No keys were entered. You can configure later with /keys.", tui.YELLOW))
+        print(
+            tui.c(
+                "No keys were entered. You can configure later with /keys.", tui.YELLOW
+            )
+        )
         return
 
     try:
@@ -200,6 +215,14 @@ TOOL CALL RULES:
 - For search_code, use short search terms (filename, symbol, or key phrase), not the user's entire sentence.
 - Only use write_file with overwrite=true for full rewrites when apply_diff is not suitable.
 - If the user asks to run a terminal command, you MUST call run_cmd (only allowed commands will work).
+- Never claim a command succeeded unless TOOL_RESULT shows ok=true and (if present) success=true.
+- For setup requests (example: "set up a React project"), do not claim completion after only creating folders.
+- For setup requests, verify expected artifacts exist (example: package.json and src/) before saying setup is complete.
+- If the user asks to create/setup a project "in a new folder" but does not provide a folder name, choose a sensible default name and proceed without asking a follow-up.
+- For React app setup with no explicit folder name, default to "my-react-app".
+- If a required command fails (ok=false, success=false, or non-zero exit_code), clearly report the failure and next step; do not fabricate completion.
+- After setup is complete, default to giving the user the exact command(s) to start the app instead of starting it automatically.
+- Only start long-running app/server processes when the user explicitly asks you to start/run/launch them.
 - If the user asks to do git actions (status/add/commit/push/pull/etc), you MUST call git_cmd.
 - If the user asks to search the codebase/files for text or symbols, you MUST call search_code.
 - If the user asks to "commit and push" (or equivalent), you MUST do: git add -> git commit -> git push.
@@ -322,6 +345,20 @@ def clip(text: str, max_chars: int = 800) -> str:
     return text[:max_chars] + "\n...[truncated]"
 
 
+def _predict_run_cmd_timeout(args: dict) -> int:
+    auto_max = 1800
+
+    raw = args.get("timeout_sec")
+    if bool(args.get("detach", False)) and (
+        not bool(args.get("_wait_for_ready", False))
+    ):
+        return 1
+    if isinstance(raw, int) and 1 <= raw <= auto_max:
+        # 60 is treated as the common default; run_cmd can auto-extend.
+        return auto_max if raw == 60 else raw
+    return auto_max
+
+
 def preflight_tool_check(tool_call: dict):
     tool = tool_call.get("tool")
     args = tool_call.get("args", {}) or {}
@@ -359,7 +396,18 @@ def _git_is_mutating(tool_call: dict) -> bool:
     if tool_call.get("tool") != "git_cmd":
         return False
     sub = str((tool_call.get("args") or {}).get("subcommand", "")).strip().lower()
-    return sub in {"add", "commit", "push", "pull", "switch", "checkout", "restore", "rm", "mv", "stash"}
+    return sub in {
+        "add",
+        "commit",
+        "push",
+        "pull",
+        "switch",
+        "checkout",
+        "restore",
+        "rm",
+        "mv",
+        "stash",
+    }
 
 
 def user_allows_mutations(user_text: str) -> bool:
@@ -372,6 +420,52 @@ def user_allows_mutations(user_text: str) -> bool:
         return False
     if t.endswith("?"):
         return False
+    return False
+
+
+def conversation_allows_mutations(messages, user_text: str) -> bool:
+    if user_allows_mutations(user_text):
+        return True
+
+    t = (user_text or "").strip().lower()
+    if not t:
+        return False
+    if any(h in t for h in READ_ONLY_REQUEST_HINTS):
+        return False
+    if t.endswith("?"):
+        return False
+
+    continuation_phrases = {
+        "yes",
+        "y",
+        "ok",
+        "okay",
+        "sure",
+        "go ahead",
+        "do it",
+        "continue",
+        "proceed",
+        "you decide",
+        "either",
+        "either one",
+        "whichever",
+    }
+    if t not in continuation_phrases:
+        return False
+
+    # Keep mutating intent for short follow-up replies that answer a clarification.
+    seen_user = 0
+    for msg in reversed(messages):
+        if msg.get("role") != "user":
+            continue
+        content = str(msg.get("content", ""))
+        if content.strip().lower() == t:
+            continue
+        seen_user += 1
+        if user_allows_mutations(content):
+            return True
+        if seen_user >= 4:
+            break
     return False
 
 
@@ -391,6 +485,13 @@ def should_enforce_readonly_guard(session: dict) -> bool:
 
 
 def main():
+    def _handle_sigint(_signum, _frame):
+        stop_active_foreground_process()
+        stop_all_tracked_processes()
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGINT, _handle_sigint)
+
     maybe_prompt_api_key_setup(force=False)
     system_prompt = build_system_prompt()
     messages = [{"role": "system", "content": system_prompt}]
@@ -415,6 +516,8 @@ def main():
         try:
             user_text = tui.read_user_input(session)
         except KeyboardInterrupt:
+            stop_active_foreground_process()
+            stop_all_tracked_processes()
             raise SystemExit(130)
         if user_text is None:
             continue
@@ -435,9 +538,9 @@ def main():
         if tui.handle_ui_command(user_text, session):
             continue
 
-        allow_mutations = user_allows_mutations(user_text)
-        enforce_readonly_guard = should_enforce_readonly_guard(session)
         messages.append({"role": "user", "content": user_text})
+        allow_mutations = conversation_allows_mutations(messages, user_text)
+        enforce_readonly_guard = should_enforce_readonly_guard(session)
         tool_index = 0
         malformed_tool_retry_used = False
 
@@ -454,6 +557,10 @@ def main():
                     )
                 finally:
                     indicator.stop()
+            except KeyboardInterrupt:
+                stop_active_foreground_process()
+                stop_all_tracked_processes()
+                raise SystemExit(130)
             except Exception as e:
                 print(f"▢ {tui.c('Baxter:', tui.RED)} model error: {e}")
                 break
@@ -482,7 +589,11 @@ def main():
             tui.print_separator(f"Tool Step {tool_index}")
             tui.print_tool_event(tool_call, tool_index)
 
-            if enforce_readonly_guard and (not allow_mutations) and tool_is_mutating(tool_call):
+            if (
+                enforce_readonly_guard
+                and (not allow_mutations)
+                and tool_is_mutating(tool_call)
+            ):
                 tool_result = {
                     "ok": False,
                     "error": "mutating tool blocked for read-only request",
@@ -509,7 +620,9 @@ def main():
                 tool_result = precheck_result
             else:
                 needs_confirm, confirm_prompt = tui.requires_confirmation(tool_call)
-                if needs_confirm and not tui.ask_confirmation(confirm_prompt, tool_call):
+                if needs_confirm and not tui.ask_confirmation(
+                    confirm_prompt, tool_call
+                ):
                     tool_result = {
                         "ok": False,
                         "error": "tool execution cancelled by user confirmation",
@@ -532,7 +645,68 @@ def main():
                     print(tui.c("Tell Baxter what to do differently", tui.GREEN))
                     break
                 else:
-                    tool_result = run_tool(tool_call["tool"], tool_call["args"])
+                    cmd_indicator = None
+                    tool_indicator = None
+                    if tool_call.get("tool") == "run_cmd":
+                        targs = tool_call.get("args", {}) or {}
+                        cmd_parts = targs.get("cmd")
+                        stage = tui.classify_run_cmd_step(cmd_parts)
+                        noisy_install = tui.is_noisy_install_command(cmd_parts)
+                        active_step = stage or "running command"
+                        if stage == "starting dev server" and (
+                            not bool(targs.get("detach", False))
+                        ):
+                            # Start dev server in background, then return to chat after readiness check.
+                            try:
+                                ready_port = int(targs.get("_ready_port", 3000))
+                            except Exception:
+                                ready_port = 3000
+                            targs["detach"] = True
+                            targs["_wait_for_ready"] = True
+                            targs["_ready_port"] = ready_port
+                            if "_ready_timeout_sec" not in targs:
+                                targs["_ready_timeout_sec"] = 180
+                        timeout_sec = _predict_run_cmd_timeout(targs)
+                        if not bool(targs.get("detach", False)):
+                            # Keep package-manager setup/install output compact.
+                            targs["_stream_output"] = not noisy_install
+                            mode_text = (
+                                "condensed output" if noisy_install else "live output"
+                            )
+                            print(
+                                tui.c(
+                                    f"  running: {active_step} ({mode_text}, timeout up to {timeout_sec}s)",
+                                    tui.DIM,
+                                )
+                            )
+                            cmd_indicator = tui.CommandIndicator(
+                                cmd_parts,
+                                timeout_sec=timeout_sec,
+                                active_step=active_step,
+                                inline=True,
+                            )
+                            cmd_indicator.start()
+                        else:
+                            cmd_indicator = tui.CommandIndicator(
+                                cmd_parts,
+                                timeout_sec=timeout_sec,
+                                active_step=active_step,
+                            )
+                            cmd_indicator.start()
+                    else:
+                        tool_indicator = tui.WorkingIndicator()
+                        tool_indicator.start()
+                    try:
+                        tool_result = run_tool(tool_call["tool"], tool_call["args"])
+                    except KeyboardInterrupt:
+                        stop_active_foreground_process()
+                        stop_all_tracked_processes()
+                        raise SystemExit(130)
+                    finally:
+                        if tool_indicator is not None:
+                            tool_indicator.stop()
+                        if cmd_indicator is not None:
+                            cmd_indicator.stop()
                     if (
                         tool_call.get("tool") == "apply_diff"
                         and tool_result.get("ok")
@@ -551,7 +725,10 @@ def main():
                         "If the request is not fully completed yet, call the next required tool now. "
                         "Do not stop after read/search/list tools when an edit was requested. "
                         "For git requests, execute git steps yourself with tools instead of asking the user to run commands. "
-                        "Only claim edits when apply_diff/write_file/delete_path succeeded with ok=true. "
+                        "Only claim actions that are proven by tool results. "
+                        "For commands, require ok=true and success=true (or exit_code=0 when present). "
+                        "For project setup tasks, confirm expected files/folders exist before claiming completion. "
+                        "If a required command fails, explain briefly and ask one concise follow-up. "
                         "If blocked, explain briefly and ask one concise follow-up."
                     ),
                 }
