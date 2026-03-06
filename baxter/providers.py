@@ -10,6 +10,11 @@ PROVIDERS = {
         "default_model": "llama-3.1-8b-instant",
         "url": "https://api.groq.com/openai/v1/chat/completions",
     },
+    "grok": {
+        "env_key": "XAI_API_KEY",
+        "default_model": "grok-4-1-fast-reasoning",
+        "url": "https://api.x.ai/v1/chat/completions",
+    },
     "openai": {
         "env_key": "OPENAI_API_KEY",
         "default_model": "gpt-4o-mini",
@@ -26,6 +31,10 @@ PROVIDER_MODELS = {
     "groq": [
         "llama-3.1-8b-instant",
     ],
+    "grok": [
+        "grok-4-1-fast-reasoning",
+        "grok-code-fast-1",
+    ],
     "openai": [
         "gpt-4o-mini",
         "gpt-5-mini",
@@ -41,11 +50,35 @@ PROVIDER_MODELS = {
 OPENAI_MODEL_ENV = "OPENAI_MODELS_ALLOWLIST"
 
 
-def provider_has_key(provider: str) -> bool:
+def _provider_env_keys(provider: str) -> list[str]:
     spec = PROVIDERS.get(provider)
     if not spec:
-        return False
-    return bool(os.getenv(spec["env_key"]))
+        return []
+
+    keys = spec.get("env_keys")
+    if isinstance(keys, list):
+        parsed = [str(key).strip() for key in keys if str(key).strip()]
+        if parsed:
+            return parsed
+
+    primary = str(spec.get("env_key", "")).strip()
+    return [primary] if primary else []
+
+
+def _get_provider_api_key(provider: str) -> str:
+    for env_key in _provider_env_keys(provider):
+        value = os.getenv(env_key, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def get_provider_api_key(provider: str) -> str:
+    return _get_provider_api_key(provider)
+
+
+def provider_has_key(provider: str) -> bool:
+    return bool(_get_provider_api_key(provider))
 
 
 def get_default_model(provider: str) -> str:
@@ -102,7 +135,7 @@ def _request_json_get(url: str, headers: dict, timeout_sec: int = 60) -> dict:
 
 def _list_openai_models() -> list[str]:
     spec = PROVIDERS["openai"]
-    api_key = os.getenv(spec["env_key"])
+    api_key = _get_provider_api_key("openai")
     if not api_key:
         return []
 
@@ -147,7 +180,7 @@ def _call_openai_compatible(
     provider: str, messages, model: str, temperature: float
 ) -> str:
     spec = PROVIDERS[provider]
-    api_key = os.getenv(spec["env_key"])
+    api_key = _get_provider_api_key(provider)
     if not api_key:
         raise RuntimeError(f"{spec['env_key']} is missing. Put it in .env and restart.")
 
@@ -171,7 +204,7 @@ def _call_openai_compatible(
 
 def _call_openai_responses(messages, model: str, temperature: float) -> str:
     spec = PROVIDERS["openai"]
-    api_key = os.getenv(spec["env_key"])
+    api_key = _get_provider_api_key("openai")
     if not api_key:
         raise RuntimeError(f"{spec['env_key']} is missing. Put it in .env and restart.")
 
@@ -235,7 +268,7 @@ def _call_openai_responses(messages, model: str, temperature: float) -> str:
 
 def _call_anthropic(messages, model: str, temperature: float) -> str:
     spec = PROVIDERS["anthropic"]
-    api_key = os.getenv(spec["env_key"])
+    api_key = _get_provider_api_key("anthropic")
     if not api_key:
         raise RuntimeError(f"{spec['env_key']} is missing. Put it in .env and restart.")
 
@@ -285,6 +318,8 @@ def call_provider(provider: str, messages, model: str, temperature: float = 0.2)
         )
     try:
         if provider == "groq":
+            return _call_openai_compatible(provider, messages, model, temperature)
+        if provider == "grok":
             return _call_openai_compatible(provider, messages, model, temperature)
         if provider == "openai":
             return _call_openai_responses(messages, model, temperature)

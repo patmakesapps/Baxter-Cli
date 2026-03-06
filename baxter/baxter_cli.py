@@ -10,6 +10,7 @@ from baxter import terminal_ui as tui
 from baxter.providers import (
     PROVIDERS,
     call_provider,
+    get_provider_api_key,
     provider_has_key,
 )
 from baxter.tools.registry import TOOL_NAMES, render_registry_for_prompt, run_tool
@@ -123,6 +124,7 @@ def maybe_prompt_api_key_setup(force: bool = False) -> None:
     if (not force) and (
         provider_has_key("anthropic")
         or provider_has_key("openai")
+        or provider_has_key("grok")
         or provider_has_key("groq")
     ):
         return
@@ -151,20 +153,27 @@ def maybe_prompt_api_key_setup(force: bool = False) -> None:
 
     existing = _parse_env_file(env_path)
     changed = False
-    for provider in ("openai", "anthropic", "groq"):
-        env_key = str(PROVIDERS[provider]["env_key"])
-        current = os.getenv(env_key, "").strip()
+    for provider in ("openai", "anthropic", "grok", "groq"):
+        spec = PROVIDERS[provider]
+        env_key = str(spec["env_key"])
+        env_keys = [str(k) for k in spec.get("env_keys", [env_key]) if str(k).strip()]
+        current = get_provider_api_key(provider)
         state = "set" if current else "empty"
         prompt = f"Enter {env_key} [{state}]"
         prompt += " (Enter=keep, -=clear): "
         raw = input(prompt).strip()
         if raw == "-":
-            existing.pop(env_key, None)
-            os.environ.pop(env_key, None)
+            for key_name in env_keys:
+                existing.pop(key_name, None)
+                os.environ.pop(key_name, None)
             changed = True
         elif raw:
             existing[env_key] = raw
             os.environ[env_key] = raw
+            for key_name in env_keys:
+                if key_name != env_key:
+                    existing.pop(key_name, None)
+                    os.environ.pop(key_name, None)
             changed = True
         elif current:
             existing[env_key] = current
@@ -239,13 +248,13 @@ TOOL CALL RULES:
 
 
 def pick_startup_provider() -> str:
-    for name in ("anthropic", "openai", "groq"):
+    for name in ("anthropic", "openai", "grok", "groq"):
         if provider_has_key(name):
             return name
     print(
         tui.c(
             "WARNING: No provider API keys found. "
-            "Set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY in "
+            "Set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or GROQ_API_KEY in "
             "~/.baxter/.env (or .env in the current folder).",
             tui.YELLOW,
         )
@@ -500,7 +509,10 @@ def main():
     print(tui.c(BOOT_BANNER, tui.GREEN))
     print(
         tui.c("Has keys:", tui.GREEN),
-        f"groq={provider_has_key('groq')} openai={provider_has_key('openai')} anthropic={provider_has_key('anthropic')}",
+        (
+            f"groq={provider_has_key('groq')} grok={provider_has_key('grok')} "
+            f"openai={provider_has_key('openai')} anthropic={provider_has_key('anthropic')}"
+        ),
     )
     print("Type 'exit' to quit.\n")
     print("Use /models and /apikeys.\n")
@@ -532,7 +544,10 @@ def main():
                     "Key status:",
                     tui.GREEN,
                 ),
-                f"groq={provider_has_key('groq')} openai={provider_has_key('openai')} anthropic={provider_has_key('anthropic')}",
+                (
+                    f"groq={provider_has_key('groq')} grok={provider_has_key('grok')} "
+                    f"openai={provider_has_key('openai')} anthropic={provider_has_key('anthropic')}"
+                ),
             )
             continue
         if tui.handle_ui_command(user_text, session):

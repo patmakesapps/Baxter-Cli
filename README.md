@@ -13,8 +13,9 @@ NOTE: a new version of the pip install is currently in development which will al
 - Provider support:
   - `anthropic` (`/v1/messages`)
   - `openai` (`/v1/responses`)
+  - `grok` (xAI OpenAI-compatible `chat/completions`)
   - `groq` (OpenAI-compatible `chat/completions`)
-- Startup provider preference: `anthropic` -> `openai` -> `groq`
+- Startup provider preference: `anthropic` -> `openai` -> `grok` -> `groq`
 - Curated model lists per provider (with OpenAI dynamic filtering against `/v1/models`)
 - Working indicator while model calls are in flight (`Baxter is working...`)
 - Built-in malformed tool-call recovery (one automatic retry if JSON tool call is broken)
@@ -28,6 +29,9 @@ NOTE: a new version of the pip install is currently in development which will al
 - `openai`
   - `gpt-4o-mini` (default)
   - `gpt-5-mini`
+- `grok`
+  - `grok-4-1-fast-reasoning` (default)
+  - `grok-code-fast-1`
 - `groq`
   - `llama-3.1-8b-instant` (default)
 
@@ -102,6 +106,7 @@ Baxter asks `y/N` confirmation before:
 - At least one API key:
   - `ANTHROPIC_API_KEY`
   - `OPENAI_API_KEY`
+  - `XAI_API_KEY`
   - `GROQ_API_KEY`
 
 ## Setup (Developer)
@@ -139,6 +144,7 @@ pip install -e .
 
 ```env
 GROQ_API_KEY=...
+XAI_API_KEY=...
 OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...
 # optional:
@@ -172,6 +178,7 @@ Example:
 
 ```env
 GROQ_API_KEY=...
+XAI_API_KEY=...
 OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...
 # optional:
@@ -195,6 +202,7 @@ Use this to verify first-run key loading and precedence.
 ```powershell
 Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:XAI_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:GROQ_API_KEY -ErrorAction SilentlyContinue
 Remove-Item "$HOME\.baxter\.env" -ErrorAction SilentlyContinue
 baxter
@@ -218,6 +226,7 @@ Expected: no missing-key warning.
 
 ```powershell
 @"
+XAI_API_KEY=your_real_grok_key
 GROQ_API_KEY=your_real_groq_key
 "@ | Set-Content ".env"
 baxter
