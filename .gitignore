@@ -113,11 +113,13 @@ react-project/
 # Temporary files
 # =========================
 
+.tmp*/
 *.tmp
 *.temp
 *.bak
 *.swp
 *.swo
+write-test.txt
 
 # =========================
 # MyPy
