@@ -1,10 +1,10 @@
-# Terminal Coding Agent (Baxter CLI)
+# Terminal Coding Agent (Lumagent CLI)
 
-![Baxter CLI Banner](baxter.png)
+![Lumagent CLI Banner](baxter.png)
 
 A local terminal coding assistant with provider switching, tool-calling, and safety rails for file + command operations.
 
-NOTE: a new version of the pip install is currently in development which will allow Baxter to create a react app and more cmd actions. 
+NOTE: a new version of the pip install is currently in development which will allow Lumagent to create a react app and more cmd actions. 
       The current repo is not alighned with the existimg pip install. We will update pip when the new repo changes are stable enough for prod.
 
 ## Features
@@ -17,7 +17,7 @@ NOTE: a new version of the pip install is currently in development which will al
   - `groq` (OpenAI-compatible `chat/completions`)
 - Startup provider preference: `anthropic` -> `openai` -> `grok` -> `groq`
 - Curated model lists per provider (with OpenAI dynamic filtering against `/v1/models`)
-- Working indicator while model calls are in flight (`Baxter is working...`)
+- Working indicator while model calls are in flight (`Lumagent is working...`)
 - Built-in malformed tool-call recovery (one automatic retry if JSON tool call is broken)
 
 ## Current Model Sets
@@ -62,7 +62,7 @@ Key behaviors:
 
 ## Confirmations
 
-Baxter asks `y/N` confirmation before:
+Lumagent asks `y/N` confirmation before:
 - `delete_path`
 - `apply_diff`
 - `write_file` when `overwrite=true`
@@ -151,28 +151,28 @@ ANTHROPIC_API_KEY=...
 # OPENAI_MODELS_ALLOWLIST=gpt-4o-mini,gpt-5-mini
 ```
 
-The CLI also loads user-level keys from `~/.baxter/.env` first, then applies project `.env` as an override.
+The CLI also loads user-level keys from `~/.lumagent/.env` first, then applies project `.env` as an override.
 
 ## Setup (User install via pip)
 
-Current PyPI release: `baxter-cli==0.1.2`
+Current PyPI release: `lumagent==0.1.2`
 
 1. Install (or pin to this release):
 
 ```bash
-pip install baxter-cli==0.1.2
+pip install lumagent==0.1.2
 ```
 
 2. Upgrade later:
 
 ```bash
-pip install -U baxter-cli
+pip install -U lumagent
 ```
 
 3. Configure keys once per machine in:
 
-- Windows: `%USERPROFILE%\.baxter\.env`
-- macOS/Linux: `~/.baxter/.env`
+- Windows: `%USERPROFILE%\.lumagent\.env`
+- macOS/Linux: `~/.lumagent/.env`
 
 Example:
 
@@ -185,12 +185,12 @@ ANTHROPIC_API_KEY=...
 # OPENAI_MODELS_ALLOWLIST=gpt-4o-mini,gpt-5-mini
 ```
 
-If keys are missing on startup, Baxter now offers an interactive one-time setup prompt and writes keys to `~/.baxter/.env`.
+If keys are missing on startup, Lumagent now offers an interactive one-time setup prompt and writes keys to `~/.lumagent/.env`.
 
 4. Open any project folder and run:
 
 ```bash
-baxter
+lumagent
 ```
 
 ## Environment Setup Smoke Test
@@ -204,8 +204,8 @@ Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:XAI_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:GROQ_API_KEY -ErrorAction SilentlyContinue
-Remove-Item "$HOME\.baxter\.env" -ErrorAction SilentlyContinue
-baxter
+Remove-Item "$HOME\.lumagent\.env" -ErrorAction SilentlyContinue
+lumagent
 ```
 
 Expected: startup warning about missing keys.
@@ -213,11 +213,11 @@ Expected: startup warning about missing keys.
 2. User-level key file path:
 
 ```powershell
-mkdir $HOME\.baxter -Force
+mkdir $HOME\.lumagent -Force
 @"
 OPENAI_API_KEY=your_real_key
-"@ | Set-Content "$HOME\.baxter\.env"
-baxter
+"@ | Set-Content "$HOME\.lumagent\.env"
+lumagent
 ```
 
 Expected: no missing-key warning.
@@ -229,7 +229,7 @@ Expected: no missing-key warning.
 XAI_API_KEY=your_real_grok_key
 GROQ_API_KEY=your_real_groq_key
 "@ | Set-Content ".env"
-baxter
+lumagent
 ```
 
 Expected: local `.env` values override user-level values for overlapping keys.
@@ -237,7 +237,7 @@ Expected: local `.env` values override user-level values for overlapping keys.
 ## Run
 
 ```bash
-baxter
+lumagent
 ```
 
 or:
@@ -267,7 +267,7 @@ python -m baxter.baxter_cli
 `run_cmd` process behavior:
 - Use `detach=true` to start long-running commands (example: `["npm","run","dev"]`) in the background.
 - Detached runs return `pid` and a background status message in the terminal UI.
-- To stop a detached process, call `run_cmd` with `stop_pid` (only PIDs started by this Baxter session are stoppable).
+- To stop a detached process, call `run_cmd` with `stop_pid` (only PIDs started by this Lumagent session are stoppable).
 - On Windows, `run_cmd` automatically retries common shims (example: `npm` -> `npm.cmd`) if the bare binary is not found.
 
 `git_cmd` subcommand allowlist:
@@ -299,9 +299,9 @@ Additional protections:
 ## Troubleshooting
 
 - Missing key error:
-  - Verify `.env` has the expected API key and restart Baxter.
+  - Verify `.env` has the expected API key and restart Lumagent.
 - OpenAI tool-call/JSON issues:
-  - Baxter now does one automatic repair retry for malformed tool-call JSON.
+  - Lumagent now does one automatic repair retry for malformed tool-call JSON.
 - OpenAI model list too large:
   - Set `OPENAI_MODELS_ALLOWLIST` explicitly.
 - `git not found on PATH`:

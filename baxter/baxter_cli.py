@@ -21,10 +21,10 @@ from baxter.tools.run_cmd import (
 
 
 def load_baxter_env() -> None:
-    # 1) Load machine-level Baxter config for one-time key setup.
+    # 1) Load machine-level Lumagent config for one-time key setup.
     home = os.path.expanduser("~")
     if home and home != "~":
-        user_env = os.path.join(home, ".baxter", ".env")
+        user_env = os.path.join(home, ".lumagent", ".env")
         if os.path.isfile(user_env):
             load_dotenv(dotenv_path=user_env, override=False)
 
@@ -35,17 +35,17 @@ def load_baxter_env() -> None:
 load_baxter_env()
 
 BOOT_BANNER = r"""
-██████╗  █████╗ ██╗  ██╗████████╗███████╗██████╗
-██╔══██╗██╔══██╗╚██╗██╔╝╚══██╔══╝██╔════╝██╔══██╗
-██████╔╝███████║ ╚███╔╝    ██║   █████╗  ██████╔╝
-██╔══██╗██╔══██║ ██╔██╗    ██║   ██╔══╝  ██╔══██╗
-██████╔╝██║  ██║██╔╝ ██╗   ██║   ███████╗██║  ██║
-╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
+ _                                  _   
+| |   _   _ _ __ ___   __ _  __ _  ___ _ __ | |_ 
+| |  | | | | '_ ` _ \ / _` |/ _` |/ _ \ '_ \| __|
+| |__| |_| | | | | | | (_| | (_| |  __/ | | | |_ 
+|_____\__,_|_| |_| |_|\__,_|\__, |\___|_| |_|\__|
+                            |___/                 
 
-      ⟡ B A X T E R  •  Neural Reasoning Engine Online ⟡
-──────────────────────────────────────────────────────────
+      [ Lumagent ]  Neural Reasoning Engine Online
+----------------------------------------------------------
   CORE: STABLE   |   TOOL MODULES: READY   |   SAFETY: ON
-──────────────────────────────────────────────────────────
+----------------------------------------------------------
 """
 
 MUTATING_TOOLS = {"apply_diff", "write_file", "make_dir", "delete_path", "run_cmd"}
@@ -85,7 +85,7 @@ def _user_env_path() -> str | None:
     home = os.path.expanduser("~")
     if not home or home == "~":
         return None
-    return os.path.join(home, ".baxter", ".env")
+    return os.path.join(home, ".lumagent", ".env")
 
 
 def _parse_env_file(path: str) -> dict[str, str]:
@@ -133,7 +133,7 @@ def maybe_prompt_api_key_setup(force: bool = False) -> None:
         return
 
     if force:
-        print(tui.c("API key setup (~/.baxter/.env)", tui.GREEN))
+        print(tui.c("API key setup (~/.lumagent/.env)", tui.GREEN))
         print(
             tui.c(
                 "Press Enter to keep current value, enter '-' to clear a key.",
@@ -143,7 +143,7 @@ def maybe_prompt_api_key_setup(force: bool = False) -> None:
     else:
         print(
             tui.c(
-                "No provider API keys found. Configure now for one-time setup in ~/.baxter/.env.",
+                "No provider API keys found. Configure now for one-time setup in ~/.lumagent/.env.",
                 tui.YELLOW,
             )
         )
@@ -187,7 +187,7 @@ def maybe_prompt_api_key_setup(force: bool = False) -> None:
     if not changed and not force:
         print(
             tui.c(
-                "No keys were entered. You can configure later with /keys.", tui.YELLOW
+                "No keys were entered. You can configure later with /apikeys.", tui.YELLOW
             )
         )
         return
@@ -201,7 +201,7 @@ def maybe_prompt_api_key_setup(force: bool = False) -> None:
 
 
 def build_system_prompt() -> str:
-    return f"""You are Baxter, a helpful coding assistant.
+    return f"""You are Lumagent, a helpful coding assistant.
 
 You have OPTIONAL access to a tool registry. Use a tool ONLY when necessary to complete the user's request correctly.
 
@@ -255,7 +255,7 @@ def pick_startup_provider() -> str:
         tui.c(
             "WARNING: No provider API keys found. "
             "Set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or GROQ_API_KEY in "
-            "~/.baxter/.env (or .env in the current folder).",
+            "~/.lumagent/.env (or .env in the current folder).",
             tui.YELLOW,
         )
     )
@@ -577,7 +577,7 @@ def main():
                 stop_all_tracked_processes()
                 raise SystemExit(130)
             except Exception as e:
-                print(f"▢ {tui.c('Baxter:', tui.RED)} model error: {e}")
+                print(f"▢ {tui.c('Lumagent:', tui.RED)} model error: {e}")
                 break
 
             messages.append({"role": "assistant", "content": reply})
@@ -657,7 +657,7 @@ def main():
                             ),
                         }
                     )
-                    print(tui.c("Tell Baxter what to do differently", tui.GREEN))
+                    print(tui.c("Tell Lumagent what to do differently", tui.GREEN))
                     break
                 else:
                     cmd_indicator = None

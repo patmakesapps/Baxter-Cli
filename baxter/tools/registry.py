@@ -64,7 +64,7 @@ TOOL_REGISTRY = {
             "cwd": 'string (optional, relative path; example: "." or "tools")',
             "timeout_sec": "int (optional, 1-1800; default adaptive 60->1800)",
             "detach": "bool (optional; default false; start command in background and return pid)",
-            "stop_pid": "int (optional; stop a detached pid started by this Baxter session)",
+            "stop_pid": "int (optional; stop a detached pid started by this Lumagent session)",
         },
         "runner": run_cmd_run,
     },

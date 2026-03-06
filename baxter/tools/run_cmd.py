@@ -36,7 +36,7 @@ WINDOWS_BIN_FALLBACKS = {
     "npx": "npx.cmd",
 }
 
-# Track only detached processes started by this Baxter session.
+# Track only detached processes started by this Lumagent session.
 DETACHED_PIDS: set[int] = set()
 ACTIVE_FOREGROUND_PROC: subprocess.Popen | None = None
 ACTIVE_FOREGROUND_LOCK = threading.Lock()
@@ -138,7 +138,7 @@ def stop_active_foreground_process() -> bool:
 
 def stop_all_tracked_processes() -> int:
     """
-    Best-effort stop for all detached processes started by this Baxter session.
+    Best-effort stop for all detached processes started by this Lumagent session.
     Returns the number of tracked pids that were targeted.
     """
     pids = list(DETACHED_PIDS)
@@ -195,7 +195,7 @@ def _stop_tracked_pid(pid: int) -> dict:
     if pid not in DETACHED_PIDS:
         return {
             "ok": False,
-            "error": f"pid {pid} is not tracked in this Baxter session",
+            "error": f"pid {pid} is not tracked in this Lumagent session",
             "pid": pid,
         }
 
@@ -315,7 +315,7 @@ def run(args: dict) -> dict:
       - cwd: string relative path (optional, default ".")
       - timeout_sec: int (optional, 1-1800). Default uses adaptive behavior from 60s up to 1800.
       - detach: bool (optional, default false). If true, starts process and returns PID immediately.
-      - stop_pid: int (optional). Stop a detached process started by this Baxter session.
+      - stop_pid: int (optional). Stop a detached process started by this Lumagent session.
     """
     stop_pid = args.get("stop_pid")
     if stop_pid is not None:

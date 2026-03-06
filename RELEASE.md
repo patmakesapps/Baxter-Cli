@@ -1,4 +1,4 @@
-# Baxter CLI Release Checklist
+# Lumagent CLI Release Checklist
 
 Use this checklist for every release to keep publishing and regression checks consistent.
 
@@ -25,12 +25,12 @@ Use this checklist for every release to keep publishing and regression checks co
 
 1. Create a fresh folder + fresh venv.
 2. Install from local wheel:
-   - `pip install C:\Baxter\Baxter-Cli\dist\baxter_cli-<version>-py3-none-any.whl`
-3. Run Baxter from that folder:
-   - `baxter`
+   - `pip install dist\lumagent-<version>-py3-none-any.whl`
+3. Run Lumagent from that folder:
+   - `lumagent`
 4. Verify user-level key loading:
-   - `%USERPROFILE%\.baxter\.env` on Windows
-   - `~/.baxter/.env` on macOS/Linux
+   - `%USERPROFILE%\.lumagent\.env` on Windows
+   - `~/.lumagent/.env` on macOS/Linux
 
 ## Publish
 
@@ -40,7 +40,7 @@ Use this checklist for every release to keep publishing and regression checks co
 3. Publish to PyPI:
    - `python -m twine upload dist/*`
 4. Verify public install:
-   - `pip install -U baxter-cli`
+   - `pip install -U lumagent`
 
 ## Post-Release
 

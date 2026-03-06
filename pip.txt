@@ -1,19 +1,19 @@
-# Baxter CLI pip commands
+# Lumagent CLI pip commands
 
 # Install from PyPI
-pip install baxter-cli
+pip install lumagent
 
 # Upgrade to latest
-pip install -U baxter-cli
+pip install -U lumagent
 
 # Install a specific version
-pip install baxter-cli==0.1.2
+pip install lumagent==0.1.2
 
 # Uninstall
-pip uninstall baxter-cli
+pip uninstall lumagent
 
 # Show installed package info
-pip show baxter-cli
+pip show lumagent
 
 # Build release artifacts (from repo)
 python -m build

@@ -1,1 +1,1 @@
-# entry point for baxter
+# entry point for lumagent

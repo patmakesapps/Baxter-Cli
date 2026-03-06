@@ -10,13 +10,26 @@ import time
 from baxter.providers import PROVIDERS, get_default_model, get_provider_models, provider_has_key
 from baxter.tools.safe_path import resolve_in_root
 
-GREEN = "\033[32m"
+GREEN = "\033[35m"
 YELLOW = "\033[33m"
 RED = "\033[31m"
 DIM = "\033[2m"
 UNDERLINE = "\033[4m"
 RESET = "\033[0m"
 IS_WINDOWS = os.name == "nt"
+
+
+def _supports_text(text: str) -> bool:
+    encoding = getattr(sys.stdout, "encoding", None) or ""
+    try:
+        text.encode(encoding or "utf-8")
+        return True
+    except Exception:
+        return False
+
+
+ASSISTANT_MARK = "▢" if _supports_text("▢") else ">"
+USER_MARK = "▣" if _supports_text("▣") else ">"
 
 def supports_color() -> bool:
     if os.getenv("NO_COLOR"):
@@ -81,9 +94,9 @@ def strip_markdown(text: str) -> str:
 
 
 def print_assistant_reply(reply: str) -> None:
-    label = f"▢ {c('Baxter:', GREEN)} "
+    label = f"{ASSISTANT_MARK} {c('Lumagent:', GREEN)} "
     width = terminal_width()
-    body_width = max(20, width - len("▢ Baxter: "))
+    body_width = max(20, width - len(f"{ASSISTANT_MARK} Lumagent: "))
     cleaned = strip_markdown(reply or "")
     lines = cleaned.splitlines() or [""]
 
@@ -279,7 +292,7 @@ def print_separator(label: str) -> None:
 
 
 class WorkingIndicator:
-    def __init__(self, label: str = "▢ Baxter is working") -> None:
+    def __init__(self, label: str = f"{ASSISTANT_MARK} Lumagent is working") -> None:
         self.label = label
         self._stop = threading.Event()
         self._thread = None
@@ -317,7 +330,7 @@ class CommandIndicator:
         self,
         cmd_parts,
         timeout_sec: int | None = None,
-        label: str = "▢ Baxter is working",
+        label: str = f"{ASSISTANT_MARK} Lumagent is working",
         active_step: str | None = None,
         inline: bool = True,
     ) -> None:
@@ -518,11 +531,11 @@ def slash_picker(session: dict) -> None:
 
 def read_user_input(session: dict) -> str | None:
     if not IS_WINDOWS or not sys.stdin.isatty():
-        return input("▣ You:").strip()
+        return input(f"{USER_MARK} You:").strip()
 
     import msvcrt
 
-    sys.stdout.write("▣ You:")
+    sys.stdout.write(f"{USER_MARK} You:")
     sys.stdout.flush()
     buf = ""
     source_flags: list[bool] = []
@@ -606,7 +619,7 @@ def read_user_input(session: dict) -> str | None:
             sys.stdout.write("\n")
             sys.stdout.flush()
             print(c(f"[{pasted_char_count} chars pasted]", GREEN))
-            sys.stdout.write("▣ You:")
+            sys.stdout.write(f"{USER_MARK} You:")
             if visible_chars:
                 sys.stdout.write("".join(visible_chars))
             sys.stdout.flush()
