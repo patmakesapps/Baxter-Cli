@@ -50,6 +50,8 @@ Best for: When you need tasks completed with the efficiency of a sentient spread
 Strengths: Will solve your problem, anticipate 3 problems you didn't know you had, and apologize profusely the entire time.
 Approach: Relentlessly helpful while muttering "as per your request" in the background.
 
+Too lazy to write a silly bit on Grok... but we added support for XAI and its pretty f'n lit man...
+
 ========================================
 
 IMPORTANT NOTES:

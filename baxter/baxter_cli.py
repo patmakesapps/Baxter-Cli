@@ -34,6 +34,22 @@ def load_baxter_env() -> None:
 
 load_baxter_env()
 
+
+def configure_stdio() -> None:
+    # Avoid Windows cp1252 crashes when printing Unicode UI/banner text.
+    if os.name != "nt":
+        return
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
 BOOT_BANNER = r"""
  _                                  _   
 | |   _   _ _ __ ___   __ _  __ _  ___ _ __ | |_ 
@@ -494,6 +510,8 @@ def should_enforce_readonly_guard(session: dict) -> bool:
 
 
 def main():
+    configure_stdio()
+
     def _handle_sigint(_signum, _frame):
         stop_active_foreground_process()
         stop_all_tracked_processes()

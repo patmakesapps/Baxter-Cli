@@ -1,11 +1,8 @@
 # Terminal Coding Agent (Lumagent CLI)
 
-![Lumagent CLI Banner](baxter.png)
+![Lumagent CLI Banner](lumagent_logo.png)
 
 A local terminal coding assistant with provider switching, tool-calling, and safety rails for file + command operations.
-
-NOTE: a new version of the pip install is currently in development which will allow Lumagent to create a react app and more cmd actions. 
-      The current repo is not alighned with the existimg pip install. We will update pip when the new repo changes are stable enough for prod.
 
 ## Features
 
@@ -38,7 +35,7 @@ NOTE: a new version of the pip install is currently in development which will al
 Notes:
 - OpenAI model IDs are fetched from `/v1/models` and intersected with the allowlist above.
 - You can override the OpenAI allowlist with `OPENAI_MODELS_ALLOWLIST` (comma-separated IDs).
-- Codex models are not currently supported in `v0.1.2`.
+- Codex models are not currently supported in `v0.1.3`.
 
 ## Tooling
 
@@ -155,12 +152,12 @@ The CLI also loads user-level keys from `~/.lumagent/.env` first, then applies p
 
 ## Setup (User install via pip)
 
-Current PyPI release: `lumagent==0.1.2`
+Current PyPI release: `lumagent==0.1.3`
 
 1. Install (or pin to this release):
 
 ```bash
-pip install lumagent==0.1.2
+pip install lumagent==0.1.3
 ```
 
 2. Upgrade later:
